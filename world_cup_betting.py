@@ -271,7 +271,7 @@ with tab1:
                     choice = st.radio("Pick an outcome:", [team_a, "Draw", team_b], key=f"pick_{match_id}_c{cycle}", horizontal=True)
                     
                     if st.session_state.balance < 1.0:
-                        st.error("📉 You're broke! Go to the Admin Control Panel and reset your balance.")
+                        st.error("📉 You're broke!")
                     else:
                         default_bet = min(10.0, float(st.session_state.balance))
                         bet_amount = st.number_input(
