@@ -206,7 +206,7 @@ st.sidebar.title("👤 Player Profile ID")
 username_input = st.sidebar.text_input("Enter Profile Name to Load Wallet:", value="").strip()
 
 if not username_input:
-    st.title("💸 PayGone Simulator")
+    st.title("💸 PayGone World Cup 2026 Betting Simulator")
     st.info("👈 Please enter a nickname in the sidebar on the left to sign in!")
     st.stop()
 
