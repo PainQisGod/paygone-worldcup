@@ -3,7 +3,7 @@ import json
 import os
 
 # -------------------------------------------------------------------------
-# DATABASE PATHS & UTILITIES (GLOBAL & USER SAVES)
+# DATABASE PATHS & UTILITIES
 # -------------------------------------------------------------------------
 RESULTS_FILE = "global_settled_results.json"
 
@@ -32,11 +32,11 @@ def load_user_data(username):
             with open(filename, "r") as f:
                 data = json.load(f)
                 data["bets"] = {int(k): v for k, v in data.get("bets", {}).items()}
-                data["processed_payouts"] = set(data.get("processed_payouts", []))
+                data["processed_payouts"] = list(data.get("processed_payouts", []))
                 return data
         except:
             pass
-    return {"balance": 670.0, "bets": {}, "processed_payouts": set()}
+    return {"balance": 670.0, "bets": {}, "processed_payouts": []}
 
 def save_user_data(username, balance, bets, processed_payouts):
     filename = get_user_file(username)
@@ -49,7 +49,7 @@ def save_user_data(username, balance, bets, processed_payouts):
         json.dump(data, f)
 
 # -------------------------------------------------------------------------
-# 1. REAL FIFA WORLD RANKING POINTS DATA WITH EMOJI FLAGS
+# 1. FIFA WORLD RANKING POINTS DATA
 # -------------------------------------------------------------------------
 FIFA_SCORES = {
     "🇦🇷 Argentina": 1877.27, "🇪🇸 Spain": 1874.71, "🇫🇷 France": 1870.70, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 England": 1828.02,
@@ -200,7 +200,7 @@ def calculate_odds(team_a, team_b):
     return round(1 / win_prob_a, 2), round(1 / draw_prob, 2), round(1 / win_prob_b, 2)
 
 # -------------------------------------------------------------------------
-# 2. PROFILE SIGN-IN STEP (ALWAYS RUNS FIRST TO PREVENT LOCKING)
+# 2. PROFILE SIGN-IN STEP
 # -------------------------------------------------------------------------
 st.sidebar.title("👤 Player Profile ID")
 username_input = st.sidebar.text_input("Enter Profile Name to Load Wallet:", value="").strip()
@@ -210,14 +210,16 @@ if not username_input:
     st.info("👈 Please enter a nickname in the sidebar on the left to sign in!")
     st.stop()
 
-# -------------------------------------------------------------------------
-# LOAD USER DATA & DETECT ROUTE
-# -------------------------------------------------------------------------
-user_profile = load_user_data(username_input)
-st.session_state.balance = user_profile["balance"]
-st.session_state.bets = user_profile["bets"]
-st.session_state.processed_payouts = user_profile["processed_payouts"]
-st.session_state.matches = INITIAL_MATCHES.copy()
+# --- INITIALIZE STATE ONCE PER USER LOG IN ---
+if "current_user" not in st.session_state or st.session_state.current_user != username_input:
+    user_profile = load_user_data(username_input)
+    st.session_state.current_user = username_input
+    st.session_state.balance = user_profile["balance"]
+    st.session_state.bets = user_profile["bets"]
+    st.session_state.processed_payouts = list(user_profile["processed_payouts"])
+    st.session_state.matches = INITIAL_MATCHES.copy()
+    if 'reset_cycle' not in st.session_state:
+        st.session_state.reset_cycle = 0
 
 global_results = load_global_results()
 payout_happened = False
@@ -228,22 +230,19 @@ for match_id in list(st.session_state.bets.keys()):
         user_bet = st.session_state.bets[match_id]
         if user_bet['choice'] == actual_winner:
             st.session_state.balance += (user_bet['amount'] * user_bet['odds'])
-        st.session_state.processed_payouts.add(match_id)
+        st.session_state.processed_payouts.append(match_id)
         payout_happened = True
 
 if payout_happened:
     save_user_data(username_input, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
 
-if 'reset_cycle' not in st.session_state:
-    st.session_state.reset_cycle = 0
-
 cycle = st.session_state.reset_cycle
 
-# Check if admin parameter is passed in URL
+# Modern Streamlit Query Parameter API Fix
 is_admin_route = st.query_params.get("view") == "admin"
 
 # -------------------------------------------------------------------------
-# 3. ROUTING SWITCH (ADMIN VS PLAYER VIEW)
+# 3. ROUTING SWITCH
 # -------------------------------------------------------------------------
 if is_admin_route:
     st.title("⚙️ Secret PayGone Engine")
@@ -257,8 +256,8 @@ if is_admin_route:
         if st.button("🔴 Reset Loaded Wallet Data", type="primary"):
             st.session_state.balance = 670.0
             st.session_state.bets = {}
-            st.session_state.processed_payouts = set()
-            save_user_data(username_input, 670.0, {}, set())
+            st.session_state.processed_payouts = []
+            save_user_data(username_input, 670.0, {}, [])
             st.session_state.reset_cycle += 1 
             st.toast("Profile wallet wiped back to $670!", icon="🔄")
             st.rerun()
@@ -290,7 +289,7 @@ if is_admin_route:
                     user_bet = st.session_state.bets[match_id]
                     if user_bet['choice'] == actual_result:
                         st.session_state.balance += (user_bet['amount'] * user_bet['odds'])
-                    st.session_state.processed_payouts.add(match_id)
+                    st.session_state.processed_payouts.append(match_id)
                     save_user_data(username_input, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
                 
                 st.toast(f"Result pushed globally!", icon="📣")
@@ -309,7 +308,7 @@ else:
 
     st.divider()
     
-    # Restored all match tabs cleanly
+    # All tournament tabs cleanly tracked
     subtab_list = ["Matchday 1", "Matchday 2", "Matchday 3", "Round of 32", "Round of 16", "Quarterfinals", "Semifinals", "3rd Place Match", "Final"]
     subtabs = st.tabs(subtab_list)
     
