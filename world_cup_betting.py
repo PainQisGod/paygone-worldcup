@@ -49,7 +49,7 @@ def save_user_data(username, balance, bets, processed_payouts):
         json.dump(data, f)
 
 # -------------------------------------------------------------------------
-# 1. FIFA WORLD RANKING POINTS DATA
+# 1. FIFA WORLD RANKING POINTS DATA WITH EMOJI FLAGS
 # -------------------------------------------------------------------------
 FIFA_SCORES = {
     "🇦🇷 Argentina": 1877.27, "🇪🇸 Spain": 1874.71, "🇫🇷 France": 1870.70, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 England": 1828.02,
@@ -202,25 +202,31 @@ def calculate_odds(team_a, team_b):
 # -------------------------------------------------------------------------
 # 2. PROFILE SIGN-IN STEP
 # -------------------------------------------------------------------------
-st.sidebar.title("👤 Player Profile ID")
-username_input = st.sidebar.text_input("Enter Profile Name to Load Wallet:", value="").strip()
-
-if not username_input:
+if "current_user" not in st.session_state:
     st.title("💸 PayGone - FIFA World Cup 2026 Betting Simulator")
-    st.info("👈 Please enter a nickname in the sidebar on the left to sign in!")
-    st.stop()
+    
+    # Center login UI using columns
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.write("### 👤 Player Profile ID")
+        username_input = st.text_input("Enter Profile Name to Load Wallet:", value="").strip()
+        submit_login = st.button("Access Dashboard & Save Sync")
+        
+    if submit_login and username_input:
+        user_profile = load_user_data(username_input)
+        st.session_state.current_user = username_input
+        st.session_state.balance = user_profile["balance"]
+        st.session_state.bets = user_profile["bets"]
+        st.session_state.processed_payouts = list(user_profile["processed_payouts"])
+        st.session_state.matches = INITIAL_MATCHES.copy()
+        if 'reset_cycle' not in st.session_state:
+            st.session_state.reset_cycle = 0
+        st.rerun()
+    else:
+        st.stop()
 
-# --- INITIALIZE STATE ONCE PER USER LOG IN ---
-if "current_user" not in st.session_state or st.session_state.current_user != username_input:
-    user_profile = load_user_data(username_input)
-    st.session_state.current_user = username_input
-    st.session_state.balance = user_profile["balance"]
-    st.session_state.bets = user_profile["bets"]
-    st.session_state.processed_payouts = list(user_profile["processed_payouts"])
-    st.session_state.matches = INITIAL_MATCHES.copy()
-    if 'reset_cycle' not in st.session_state:
-        st.session_state.reset_cycle = 0
-
+# --- RE-ESTABLISH STATE VARIABLES FOR CONTINUITY ---
+username_input = st.session_state.current_user
 global_results = load_global_results()
 payout_happened = False
 
@@ -244,7 +250,7 @@ cycle = st.session_state.reset_cycle
 header_left, header_right = st.columns([2, 1])
 with header_left:
     st.title("💸 PayGone")
-    st.caption(f"Active Account: **{username_input.upper()}** — Progress is automatically saved!")
+    st.caption(f"Active Account: **{username_input.upper()}** — Progress auto-saved!")
 with header_right:
     st.metric(label="Wallet Balance", value=f"${st.session_state.balance:.2f}")
 
