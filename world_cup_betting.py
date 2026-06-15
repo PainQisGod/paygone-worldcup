@@ -181,7 +181,7 @@ def calculate_odds(team_a, team_b):
 # 3. APP INITIALIZATION & LOCAL APP STATE
 # -------------------------------------------------------------------------
 if 'balance' not in st.session_state:
-    st.session_state.balance = 1000.0
+    st.session_state.balance = 670.0
 
 if 'matches' not in st.session_state:
     st.session_state.matches = INITIAL_MATCHES.copy()
