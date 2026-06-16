@@ -1,0 +1,9 @@
+# Python cache files
+__pycache__/
+*.pyc
+
+# Streamlit local config folder
+.streamlit/
+
+# JSON data private/local, unlock this:
+*.json
