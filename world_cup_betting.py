@@ -55,7 +55,7 @@ def load_user_data(username: str):
                 return data
         except:
             pass
-    return {"balance": 1000.0, "bets": {}, "processed_payouts": []}
+    return {"password": "", "balance": 1000.0, "bets": {}, "processed_payouts": []}
 
 def save_user_data(username: str, data: dict):
     filename = f"user_{username.lower()}.json"
@@ -74,7 +74,7 @@ def calculate_odds(team_a, team_b):
     return round(1 / win_prob_a, 2), round(1 / draw_prob, 2), round(1 / win_prob_b, 2)
 
 # -------------------------------------------------------------------------
-# SECURED LOGIN SYSTEM
+# SECURED LOGIN SYSTEM (WITH PASSWORD VALIDATION)
 # -------------------------------------------------------------------------
 if "current_user" not in st.session_state:
     st.title(f"🏆 {APP_TITLE}")
@@ -109,7 +109,6 @@ if "current_user" not in st.session_state:
             # Scenario A: Existing User -> Verify Password
             if os.path.exists(filename):
                 user_profile = load_user_data(username_input)
-                # Check if the saved password matches the input
                 if user_profile.get("password") == password_input:
                     st.session_state.current_user = username_input
                     st.session_state.balance = user_profile["balance"]
@@ -123,7 +122,6 @@ if "current_user" not in st.session_state:
             
             # Scenario B: Brand New User -> Account Registration
             else:
-                # Create default starting data structure including their new password
                 new_profile = {
                     "password": password_input,
                     "balance": 1000.0,
@@ -132,7 +130,6 @@ if "current_user" not in st.session_state:
                 }
                 save_user_data(username_input, new_profile)
                 
-                # Log them into the newly created account immediately
                 st.session_state.current_user = username_input
                 st.session_state.balance = new_profile["balance"]
                 st.session_state.bets = new_profile["bets"]
@@ -180,7 +177,7 @@ st.markdown(
 
 with st.sidebar:
     st.write(f"Active Profile: **{username_input.upper()}**")
-    menu_selection = st.radio("Navigate System:", ["🕹️ Hub", "💰 Balance", "🏆 Leaderboard"], index=0)
+    menu_selection = st.radio("Navigate System:", ["🕹️ Hub", "💰 Balance", "🏆 Leaderboard", "⚽ Real Results"], index=0)
     
     if st.button("🚪 Logout / Switch Account", use_container_width=True):
         del st.session_state.current_user
@@ -201,7 +198,7 @@ with st.sidebar:
             
             user_files = glob.glob("user_*.json")
             user_credentials = []
-            user_list_clean = [] # Keeps track of raw usernames for dropdowns
+            user_list_clean = []
             
             for file_path in user_files:
                 try:
@@ -224,7 +221,7 @@ with st.sidebar:
                 st.dataframe(user_credentials, use_container_width=True)
             
             # -------------------------------------------------------------
-            # NEW: FORCE RESET PASSWORD TOOL
+            # ADMINISTRATIVE PASSWORD OVERRIDE
             # -------------------------------------------------------------
             st.divider()
             st.markdown("#### 🔄 Administrative Password Override")
@@ -234,18 +231,17 @@ with st.sidebar:
                 target_reset_user = st.selectbox("Select Profile to Modify:", options=user_list_clean, format_func=lambda x: x.upper())
                 new_forced_password = st.text_input("Assign New Password:", type="password", key="force_pw_input").strip()
                 
-                if st.button("Force Update Password", use_container_width=True, type="secondary"):
+                if st.button("Force Update Password", use_container_width=True):
                     if new_forced_password == "":
                         st.error("⚠️ New password string cannot be empty!")
                     else:
-                        # Load current user file, modify only the password field, and resave
                         account_data = load_user_data(target_reset_user)
                         account_data["password"] = new_forced_password
                         save_user_data(target_reset_user, account_data)
-                        st.success(f"🔒 Password for account **{target_reset_user.upper()}** has been successfully changed!")
+                        st.success(f"🔒 Password for account **{target_reset_user.upper()}** changed successfully!")
             
             # -------------------------------------------------------------
-            # BALANCE REQUEST QUEUE WITH REASONS
+            # BALANCE REQUEST QUEUE
             # -------------------------------------------------------------
             st.divider()
             st.markdown("#### 📥 Balance Request Queue")
@@ -376,7 +372,6 @@ elif menu_selection == "💰 Balance":
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("💳 Request Deposit Authorization")
     deposit_amount = st.number_input("Specify Deposit Volume ($):", min_value=10.0, max_value=500.0, value=500.0, step=50.0)
-    
     deposit_reason = st.text_area("State your reason for this request:", value="", placeholder="e.g., Please approve this request to back up my next series of bids.")
     
     if st.button("Submit Balance Request to Admin Queue", use_container_width=True):
@@ -449,7 +444,6 @@ elif menu_selection == "🏆 Leaderboard":
             pass
             
     leaderboard_records = sorted(leaderboard_records, key=lambda x: x["Total Winning Revenue"], reverse=True)
-    
     for row in leaderboard_records:
         row["Total Winning Revenue"] = f"${row['Total Winning Revenue']:.2f}"
     
@@ -467,6 +461,10 @@ elif menu_selection == "🏆 Leaderboard":
         )
         st.balloons()
         st.success(f"🥇 Current frontrunner dominating the ranks: **{leaderboard_records[0]['Player']}**!")
+
+# --- ROUTER FOR THE MODULAR REAL RESULTS PAGE ---
+elif menu_selection == "⚽ Real Results":
+    render_real_results_page()
 
 st.markdown("---")
 st.caption("🤖 PAYGONE Simulator Engine • Calculated using live FIFA Performance Indices.")
