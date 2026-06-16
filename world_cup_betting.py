@@ -1,71 +1,13 @@
 import streamlit as st
 import json
 import os
+import glob
 
 # -------------------------------------------------------------------------
-# DATABASE PATHS & UTILITIES
+# CONSTANTS & CONFIGURATION
 # -------------------------------------------------------------------------
-RESULTS_FILE = "global_settled_results.json"
-REQUESTS_FILE = "global_balance_requests.json"
+APP_TITLE = "PAYGONE - FIFA WORLD CUP 2026 BETTING SIMULATOR"
 
-def load_global_results():
-    if os.path.exists(RESULTS_FILE):
-        try:
-            with open(RESULTS_FILE, "r") as f:
-                data = json.load(f)
-                return {int(k): v for k, v in data.items()}
-        except:
-            return {}
-    return {}
-
-def save_global_results(results_dict):
-    with open(RESULTS_FILE, "w") as f:
-        json.dump(results_dict, f)
-
-def load_balance_requests():
-    if os.path.exists(REQUESTS_FILE):
-        try:
-            with open(REQUESTS_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return []
-    return []
-
-def save_balance_requests(requests_list):
-    with open(REQUESTS_FILE, "w") as f:
-        json.dump(requests_list, f)
-
-def get_user_file(username):
-    safe_name = "".join(c for c in username if c.isalnum() or c in (' ', '_', '-')).strip()
-    return f"user_{safe_name.lower()}.json"
-
-def load_user_data(username):
-    filename = get_user_file(username)
-    if os.path.exists(filename):
-        try:
-            with open(filename, "r") as f:
-                data = json.load(f)
-                data["bets"] = {int(k): v for k, v in data.get("bets", {}).items()}
-                data["processed_payouts"] = [int(x) for x in data.get("processed_payouts", [])]
-                return data
-        except:
-            pass
-    return {"password": None, "balance": 1000.0, "bets": {}, "processed_payouts": []}
-
-def save_user_data(username, password, balance, bets, processed_payouts):
-    filename = get_user_file(username)
-    data = {
-        "password": password,
-        "balance": balance,
-        "bets": bets,
-        "processed_payouts": list(processed_payouts)
-    }
-    with open(filename, "w") as f:
-        json.dump(data, f)
-
-# -------------------------------------------------------------------------
-# 1. FIFA WORLD RANKING POINTS DATA
-# -------------------------------------------------------------------------
 FIFA_SCORES = {
     "🇲🇽 Mexico": 1687.48, "🇿🇦 South Africa": 1428.38, "🇰🇷 Korea Republic": 1591.63, "🇨🇿 Czechia": 1505.74,
     "🇨🇦 Canada": 1559.48, "🇧🇦 Bosnia and Herzegovina": 1387.22, "🇺🇸 USA": 1671.23, "🇵🇾 Paraguay": 1505.35,
@@ -157,7 +99,6 @@ INITIAL_MATCHES = [
     {"match_id": 71, "stage": "Matchday 3", "info": "Group J", "team_a": "🇩🇿 Algeria", "team_b": "🇦🇹 Austria", "date": "June 28, 2026", "time": "9:00AM (UTC+7)"},
     {"match_id": 72, "stage": "Matchday 3", "info": "Group J", "team_a": "🇯🇴 Jordan", "team_b": "🇦🇷 Argentina", "date": "June 28, 2026", "time": "9:00AM (UTC+7)"},
     
-    # --- ROUND OF 32 ---
     {"match_id": 73, "stage": "Round of 32", "info": "Round of 32 Match 1", "team_a": "Runner-up Group A", "team_b": "Runner-up Group B", "date": "June 29, 2026", "time": "2:00AM (UTC+7)"},
     {"match_id": 74, "stage": "Round of 32", "info": "Round of 32 Match 2", "team_a": "Winner Group C", "team_b": "Runner-up Group F", "date": "June 30, 2026", "time": "12:00AM (UTC+7)"},
     {"match_id": 75, "stage": "Round of 32", "info": "Round of 32 Match 3", "team_a": "Winner Group E", "team_b": "3rd Group A/B/C/D/F", "date": "June 30, 2026", "time": "3:30AM (UTC+7)"},
@@ -175,7 +116,6 @@ INITIAL_MATCHES = [
     {"match_id": 87, "stage": "Round of 32", "info": "Round of 32 Match 15", "team_a": "Winner Group J", "team_b": "Runner-up Group H", "date": "July 4, 2026", "time": "5:00AM (UTC+7)"},
     {"match_id": 88, "stage": "Round of 32", "info": "Round of 32 Match 16", "team_a": "Winner Group K", "team_b": "3rd Group D/E/I/J/L", "date": "July 4, 2026", "time": "8:30AM (UTC+7)"},
     
-    # --- ROUND OF 16 ---
     {"match_id": 89, "stage": "Round of 16", "info": "Round of 16 Match 1", "team_a": "Winner R32 Match 1", "team_b": "Winner R32 Match 4", "date": "July 5, 2026", "time": "12:00AM (UTC+7)"},
     {"match_id": 90, "stage": "Round of 16", "info": "Round of 16 Match 2", "team_a": "Winner R32 Match 3", "team_b": "Winner R32 Match 6", "date": "July 5, 2026", "time": "4:00AM (UTC+7)"},
     {"match_id": 91, "stage": "Round of 16", "info": "Round of 16 Match 3", "team_a": "Winner R32 Match 2", "team_b": "Winner R32 Match 5", "date": "July 6, 2026", "time": "3:00AM (UTC+7)"},
@@ -185,22 +125,79 @@ INITIAL_MATCHES = [
     {"match_id": 95, "stage": "Round of 16", "info": "Round of 16 Match 7", "team_a": "Winner R32 Match 15", "team_b": "Winner R32 Match 14", "date": "July 7, 2026", "time": "11:00PM (UTC+7)"},
     {"match_id": 96, "stage": "Round of 16", "info": "Round of 16 Match 8", "team_a": "Winner R32 Match 13", "team_b": "Winner R32 Match 16", "date": "July 8, 2026", "time": "3:00AM (UTC+7)"},
     
-    # --- QUARTERFINALS ---
     {"match_id": 97, "stage": "Quarterfinals", "info": "Quarterfinals Match 1", "team_a": "Winner R16 Match 1", "team_b": "Winner R16 Match 2", "date": "July 10, 2026", "time": "3:00AM (UTC+7)"},
     {"match_id": 98, "stage": "Quarterfinals", "info": "Quarterfinals Match 2", "team_a": "Winner R16 Match 5", "team_b": "Winner R16 Match 6", "date": "July 11, 2026", "time": "2:00AM (UTC+7)"},
     {"match_id": 99, "stage": "Quarterfinals", "info": "Quarterfinals Match 3", "team_a": "Winner R16 Match 3", "team_b": "Winner R16 Match 4", "date": "July 12, 2026", "time": "4:00AM (UTC+7)"},
     {"match_id": 100, "stage": "Quarterfinals", "info": "Quarterfinals Match 4", "team_a": "Winner R16 Match 7", "team_b": "Winner R16 Match 8", "date": "July 12, 2026", "time": "8:00AM (UTC+7)"},
     
-    # --- SEMIFINALS ---
     {"match_id": 101, "stage": "Semifinals", "info": "Semifinals Match 1", "team_a": "Winner QF Match 1", "team_b": "Winner QF Match 2", "date": "July 15, 2026", "time": "2:00AM (UTC+7)"},
     {"match_id": 102, "stage": "Semifinals", "info": "Semifinals Match 2", "team_a": "Winner QF Match 3", "team_b": "Winner QF Match 4", "date": "July 16, 2026", "time": "2:00AM (UTC+7)"},
     
-    # --- 3RD PLACE MATCH ---
     {"match_id": 103, "stage": "3rd Place Match", "info": "Bronze Final", "team_a": "Loser SF Match 1", "team_b": "Loser SF Match 2", "date": "July 19, 2026", "time": "4:00AM (UTC+7)"},
     
-    # --- FINAL ---
     {"match_id": 104, "stage": "Final", "info": "World Cup Final", "team_a": "Winner SF Match 1", "team_b": "Winner SF Match 2", "date": "July 20, 2026", "time": "2:00AM (UTC+7)"}
 ]
+
+RESULTS_FILE = "global_settled_results.json"
+REQUESTS_FILE = "global_balance_requests.json"
+
+# -------------------------------------------------------------------------
+# PERSISTENT SYSTEM READ/WRITE UTILITIES
+# -------------------------------------------------------------------------
+def load_global_results():
+    if os.path.exists(RESULTS_FILE):
+        try:
+            with open(RESULTS_FILE, "r") as f:
+                data = json.load(f)
+                return {int(k): v for k, v in data.items()}
+        except:
+            return {}
+    return {}
+
+def save_global_results(results_dict):
+    with open(RESULTS_FILE, "w") as f:
+        json.dump(results_dict, f)
+
+def load_balance_requests():
+    if os.path.exists(REQUESTS_FILE):
+        try:
+            with open(REQUESTS_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_balance_requests(requests_list):
+    with open(REQUESTS_FILE, "w") as f:
+        json.dump(requests_list, f)
+
+def get_user_file(username):
+    safe_name = "".join(c for c in username if c.isalnum() or c in (' ', '_', '-')).strip()
+    return f"user_{safe_name.lower()}.json"
+
+def load_user_data(username):
+    filename = get_user_file(username)
+    if os.path.exists(filename):
+        try:
+            with open(filename, "r") as f:
+                data = json.load(f)
+                data["bets"] = {int(k): v for k, v in data.get("bets", {}).items()}
+                data["processed_payouts"] = [int(x) for x in data.get("processed_payouts", [])]
+                return data
+        except:
+            pass
+    return {"password": None, "balance": 1000.0, "bets": {}, "processed_payouts": []}
+
+def save_user_data(username, password, balance, bets, processed_payouts):
+    filename = get_user_file(username)
+    data = {
+        "password": password,
+        "balance": balance,
+        "bets": bets,
+        "processed_payouts": list(processed_payouts)
+    }
+    with open(filename, "w") as f:
+        json.dump(data, f)
 
 def calculate_odds(team_a, team_b):
     rating_a = FIFA_SCORES.get(team_a, 1500.0)
@@ -214,10 +211,8 @@ def calculate_odds(team_a, team_b):
     return round(1 / win_prob_a, 2), round(1 / draw_prob, 2), round(1 / win_prob_b, 2)
 
 # -------------------------------------------------------------------------
-# 2. PROFILE SIGN-IN STEP
+# PROFILE SIGN-IN STEP
 # -------------------------------------------------------------------------
-APP_TITLE = "PAYGONE - FIFA WORLD CUP 2026 BETTING SIMULATOR"
-
 if "current_user" not in st.session_state:
     st.title(f"💸 {APP_TITLE}")
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -271,23 +266,14 @@ if payout_happened:
 cycle = st.session_state.reset_cycle
 
 # -------------------------------------------------------------------------
-# 3. SIDEBAR NAVIGATION CONTROLS
+# SIDEBAR NAVIGATION CONTROLS
 # -------------------------------------------------------------------------
 st.markdown(
     """
     <style>
-        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
-            font-size: 22px !important;
-            font-weight: bold !important;
-            color: #ffffff !important;
-        }
-        [data-testid="stSidebar"] label[data-testid="stRadioOption"] p {
-            font-size: 20px !important;
-            font-weight: 500 !important;
-        }
-        [data-testid="stSidebar"] gap {
-            gap: 15px !important;
-        }
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size: 22px !important; font-weight: bold !important; color: #ffffff !important; }
+        [data-testid="stSidebar"] label[data-testid="stRadioOption"] p { font-size: 20px !important; font-weight: 500 !important; }
+        [data-testid="stSidebar"] gap { gap: 15px !important; }
     </style>
     """,
     unsafe_allow_html=True
@@ -295,15 +281,72 @@ st.markdown(
 
 with st.sidebar:
     st.write(f"Logged in as: **{username_input.upper()}**")
-    menu_selection = st.radio("Navigate System:", ["🕹️ Hub", "💰 Balance"], index=0)
-    
+    menu_selection = st.radio("Navigate System:", ["🕹️ Hub", "💰 Balance", "🏆 Leaderboard"], index=0)
     st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
-    with st.expander("🛠️"):
+    
+    with st.expander("🛠️ Admin Panel"):
         admin_password = st.text_input("Access Token Key", type="password")
         if admin_password == "master":
-            st.caption("Admin Mode")
+            st.caption("🟢 Admin Control Authenticated")
             
-            # --- ADMIN ACTION: BALANCE REQUESTS APPROVAL SECTION ---
+            # -------------------------------------------------------------
+            # NEW COMPONENT: PASSWORD RECOVERY MANAGER
+            # -------------------------------------------------------------
+            st.divider()
+            st.markdown("#### 🔑 User Account & Password Manager")
+            
+            user_files = glob.glob("user_*.json")
+            user_credentials = []
+            
+            for file_path in user_files:
+                try:
+                    with open(file_path, "r") as f:
+                        u_data = json.load(f)
+                    display_name = file_path.replace("user_", "").replace(".json", "").upper()
+                    user_credentials.append({
+                        "Username": display_name,
+                        "Password Key": u_data.get("password", "N/A"),
+                        "Balance": f"${u_data.get('balance', 0.0):.2f}"
+                    })
+                except:
+                    pass
+            
+            if not user_credentials:
+                st.info("No user profiles detected.")
+            else:
+                # Displays a scannable credential roster for quick checks
+                st.dataframe(user_credentials, use_container_width=True)
+                
+                st.caption("🔧 Direct Password Override")
+                target_user_to_fix = st.selectbox("Select account to recover:", [u["Username"] for u in user_credentials])
+                new_password_input = st.text_input("Assign New Password:", value="")
+                
+                if st.button("Force Update Password"):
+                    if new_password_input.strip() == "":
+                        st.error("Password cannot be blank.")
+                    else:
+                        safe_name = "".join(c for c in target_user_to_fix if c.isalnum() or c in (' ', '_', '-')).strip().lower()
+                        target_filename = f"user_{safe_name}.json"
+                        
+                        try:
+                            with open(target_filename, "r") as f:
+                                current_file_data = json.load(f)
+                            
+                            current_file_data["password"] = new_password_input.strip()
+                            
+                            with open(target_filename, "w") as f:
+                                json.dump(current_file_data, f)
+                                
+                            st.success(f"✅ Reset password for {target_user_to_fix} to: {new_password_input}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error writing to system file: {e}")
+            
+            # -------------------------------------------------------------
+            # END OF PASSWORD RECOVERY TOOLS
+            # -------------------------------------------------------------
+            
+            st.divider()
             st.markdown("#### 📥 Balance Request Queue")
             pending_requests = load_balance_requests()
             if not pending_requests:
@@ -317,15 +360,11 @@ with st.sidebar:
                         t_data = load_user_data(target_user)
                         t_data["balance"] += req['amount']
                         save_user_data(target_user, t_data["password"], t_data["balance"], t_data["bets"], t_data["processed_payouts"])
-                        
-                        # If current admin session is also the requestor, update local session tracking dynamically
                         if target_user.lower() == username_input.lower():
                             st.session_state.balance = t_data["balance"]
-                            
                         pending_requests.pop(idx)
                         save_balance_requests(pending_requests)
                         st.rerun()
-                        
                     if col_rej.button("Reject", key=f"rej_{idx}"):
                         pending_requests.pop(idx)
                         save_balance_requests(pending_requests)
@@ -355,16 +394,13 @@ with st.sidebar:
                     st.rerun()
 
 # -------------------------------------------------------------------------
-# 4. MAIN LAYOUT CONTAINER
+# MAIN LAYOUT CONTAINER
 # -------------------------------------------------------------------------
 st.markdown(f"## 🏆 {APP_TITLE}")
 
 if menu_selection == "🕹️ Hub":
     st.title("🕹️ Betting Hub")
-    
-    # --- DYNAMIC BALANCE METRIC DISPLAY IN HUB ---
     st.metric(label="Your Current Balance", value=f"${st.session_state.balance:.2f}")
-    
     st.caption("Select a tournament tier tab below to browse match listings. Minimum bet requirement: **$100.00**.")
     st.divider()
 
@@ -374,7 +410,6 @@ if menu_selection == "🕹️ Hub":
     for index, stage_name in enumerate(subtab_list):
         with subtabs[index]:
             stage_matches = [m for m in st.session_state.matches if m['stage'] == stage_name]
-            
             if not stage_matches:
                 st.info("No schedule mapped for this block.")
             
@@ -402,10 +437,9 @@ if menu_selection == "🕹️ Hub":
                     choice = st.radio("Pick outcome:", [team_a, "Draw", team_b], key=f"pick_{match_id}_c{cycle}", horizontal=True)
                     
                     if st.session_state.balance < 100.0:
-                        st.error("📉 Insufficient Balance! Minimum required wager is $100.00. Go to 'Balance' panel to reload funds.")
+                        st.error("📉 Insufficient Balance! Minimum required wager is $100.00.")
                     else:
                         bet_amount = st.number_input("Wager Amount ($)", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, step=50.0, key=f"amt_{match_id}_c{cycle}")
-                        
                         if match_id in st.session_state.bets:
                             current_bet = st.session_state.bets[match_id]
                             st.info(f"🔒 Active Stake locked: ${current_bet['amount']} on **{current_bet['choice']}**")
@@ -420,9 +454,7 @@ if menu_selection == "🕹️ Hub":
 
 elif menu_selection == "💰 Balance":
     st.title("💰 Balance & Financial Logs")
-    st.write("Review active assets, execute structural wallet reloads, or observe overall historic yields.")
     st.divider()
-
     m_col1, m_col2 = st.columns(2)
     with m_col1:
         st.metric(label="Current Available Liquid Balance", value=f"${st.session_state.balance:.2f}")
@@ -435,27 +467,25 @@ elif menu_selection == "💰 Balance":
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("💳 Request Deposit Authorization")
-    deposit_amount = st.number_input("Specify Deposit Volume ($):", min_value=10.0, max_value=25000.0, value=500.0, step=100.0)
+    deposit_amount = st.number_input("Specify Deposit Volume ($):", min_value=10.0, max_value=500.0, value=500.0, step=50.0)
+    
     if st.button("Submit Balance Request to Admin Queue", use_container_width=True):
         current_requests = load_balance_requests()
         current_requests.append({"user": username_input, "amount": deposit_amount})
         save_balance_requests(current_requests)
-        st.success(f"✅ Request for ${deposit_amount:.2f} dispatched successfully. Waiting for admin approval.")
+        st.success(f"✅ Request for ${deposit_amount:.2f} dispatched successfully.")
 
     st.divider()
     st.subheader("📊 Performance Ledger History")
-    
     if not st.session_state.bets:
-        st.info("No logs present on this profile context yet.")
+        st.info("No wagers logged on this profile yet.")
     else:
         for mid, bet in st.session_state.bets.items():
             m = next((match for match in st.session_state.matches if match['match_id'] == mid), None)
             if m:
+                status_banner = "🟡 OPEN PROPOSITION"
                 if mid in global_results:
-                    is_winner = bet['choice'] == global_results[mid]
-                    status_banner = "🟢 WON PAYOUT" if is_winner else "🔴 LOST SLIP"
-                else:
-                    status_banner = "🟡 OPEN PROPOSITION"
+                    status_banner = "🟢 WON PAYOUT" if bet['choice'] == global_results[mid] else "🔴 LOST SLIP"
                 
                 with st.expander(f"{status_banner} — {m['team_a']} vs {m['team_b']}"):
                     col_a, col_b = st.columns(2)
@@ -466,9 +496,58 @@ elif menu_selection == "💰 Balance":
                         st.write(f"**Odds Multiple:** x{bet['odds']}")
                         if mid in global_results:
                             st.write(f"**Official Field Result:** {global_results[mid]}")
-                            if is_winner:
+                            if bet['choice'] == global_results[mid]:
                                 st.markdown(f"**Net Received Return:** <span style='color:green'>+${bet['amount'] * bet['odds']:.2f}</span>", unsafe_allow_html=True)
                             else:
                                 st.markdown(f"**Net Loss Value:** <span style='color:red'>-${bet['amount']:.2f}</span>", unsafe_allow_html=True)
                         else:
                             st.caption("Waiting for tournament resolution data updates...")
+
+elif menu_selection == "🏆 Leaderboard":
+    st.title("🏆 Profit Standings Leaderboard")
+    st.divider()
+    
+    # Inline rendering matrix engine for standings leaderboard
+    leaderboard_records = []
+    user_files = glob.glob("user_*.json")
+    
+    for file_path in user_files:
+        try:
+            with open(file_path, "r") as f:
+                data = json.load(f)
+                
+            display_name = file_path.replace("user_", "").replace(".json", "").upper()
+            bets = {int(k): v for k, v in data.get("bets", {}).items()}
+            
+            total_winnings = 0.0
+            for mid, bet in bets.items():
+                if mid in global_results and global_results[mid] == bet['choice']:
+                    total_winnings += (bet['amount'] * bet['odds'])
+                    
+            leaderboard_records.append({
+                "Player": display_name,
+                "Current Balance": f"${data.get('balance', 0.0):.2f}",
+                "Total Winning Revenue": total_winnings
+            })
+        except:
+            pass
+            
+    leaderboard_records = sorted(leaderboard_records, key=lambda x: x["Total Winning Revenue"], reverse=True)
+    
+    for row in leaderboard_records:
+        row["Total Winning Revenue"] = f"${row['Total Winning Revenue']:.2f}"
+    
+    if not leaderboard_records:
+        st.info("No profile records detected to establish leaderboard metrics yet.")
+    else:
+        st.dataframe(
+            leaderboard_records,
+            use_container_width=True,
+            column_config={
+                "Player": "👤 Profile Username",
+                "Current Balance": "💳 Available Wallet",
+                "Total Winning Revenue": "💰 Earned Winning Revenue"
+            }
+        )
+        st.balloons()
+        st.success(f"🥇 Current frontrunner dominating the ranks: **{leaderboard_records[0]['Player']}**!")
