@@ -4,142 +4,16 @@ import os
 import glob
 
 # -------------------------------------------------------------------------
-# CONSTANTS & CONFIGURATION
+# CONSTANTS & MODULAR DATA IMPORT
 # -------------------------------------------------------------------------
+from matches import FIFA_SCORES, INITIAL_MATCHES
+
 APP_TITLE = "PAYGONE - FIFA WORLD CUP 2026 BETTING SIMULATOR"
-
-FIFA_SCORES = {
-    "🇲🇽 Mexico": 1687.48, "🇿🇦 South Africa": 1428.38, "🇰🇷 Korea Republic": 1591.63, "🇨🇿 Czechia": 1505.74,
-    "🇨🇦 Canada": 1559.48, "🇧🇦 Bosnia and Herzegovina": 1387.22, "🇺🇸 USA": 1671.23, "🇵🇾 Paraguay": 1505.35,
-    "🇶🇦 Qatar": 1450.31, "🇨🇭 Switzerland": 1650.06, "🇧🇷 Brazil": 1765.86, "🇲🇦 Morocco": 1755.10,
-    "🇭🇹 Haiti": 1293.10, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland": 1503.34, "🇦🇺 Australia": 1579.34, "🇹🇷 Turkiye": 1605.73,
-    "🇩🇪 Germany": 1735.77, "🇨🇼 Curacao": 1294.77, "🇳🇱 Netherlands": 1753.57, "🇯🇵 Japan": 1661.58,
-    "🇨🇮 Ivory Coast": 1540.87, "🇪🇨 Ecuador": 1598.52, "🇸🇪 Sweden": 1509.79, "🇹🇳 Tunisia": 1476.41,
-    "🇪🇸 Spain": 1874.71, "🇨🇻 Cabo Verde": 1371.11, "🇧🇪 Belgium": 1742.24, "🇪🇬 Egypt": 1562.37,
-    "🇸🇦 Saudi Arabia": 1423.88, "🇺🇾 Uruguay": 1673.07, "🇮🇷 Iran": 1619.58, "🇳🇿 New Zealand": 1275.58,
-    "🇫🇷 France": 1870.70, "🇸🇳 Senegal": 1684.07, "🇮🇶 Iraq": 1446.28, "🇳🇴 Norway": 1557.44,
-    "🇦🇷 Argentina": 1877.27, "🇩🇿 Algeria": 1571.03, "🇦🇹 Austria": 1597.40, "🇯🇴 Jordan": 1387.74,
-    "🇵🇹 Portugal": 1767.85, "🇨🇩 Congo DR": 1747.43, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 England": 1828.02, "🇭🇷 Croatia": 1714.87,
-    "🇬🇭 Ghana": 1346.88, "🇵🇦 Panama": 1539.16, "🇺🇿 Uzbekistan": 1458.20, "🇨🇴 Colombia": 1698.35
-}
-
-INITIAL_MATCHES = [
-    {"match_id": 1, "stage": "Matchday 1", "info": "Group A", "team_a": "🇲🇽 Mexico", "team_b": "🇿🇦 South Africa", "date": "June 12, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 2, "stage": "Matchday 1", "info": "Group A", "team_a": "🇰🇷 Korea Republic", "team_b": "🇨🇿 Czechia", "date": "June 12, 2026", "time": "9:00AM (UTC+7)"},
-    {"match_id": 3, "stage": "Matchday 1", "info": "Group B", "team_a": "🇨🇦 Canada", "team_b": "🇧🇦 Bosnia and Herzegovina", "date": "June 13, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 4, "stage": "Matchday 1", "info": "Group D", "team_a": "🇺🇸 USA", "team_b": "🇵🇾 Paraguay", "date": "June 13, 2026", "time": "8:00AM (UTC+7)"},
-    {"match_id": 5, "stage": "Matchday 1", "info": "Group B", "team_a": "🇶🇦 Qatar", "team_b": "🇨🇭 Switzerland", "date": "June 14, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 6, "stage": "Matchday 1", "info": "Group C", "team_a": "🇧🇷 Brazil", "team_b": "🇲🇦 Morocco", "date": "June 14, 2026", "time": "5:00AM (UTC+7)"},
-    {"match_id": 7, "stage": "Matchday 1", "info": "Group C", "team_a": "🇭🇹 Haiti", "team_b": "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland", "date": "June 14, 2026", "time": "8:00AM (UTC+7)"},
-    {"match_id": 8, "stage": "Matchday 1", "info": "Group D", "team_a": "🇦🇺 Australia", "team_b": "🇹🇷 Turkiye", "date": "June 14, 2026", "time": "11:00AM (UTC+7)"},
-    {"match_id": 9, "stage": "Matchday 1", "info": "Group E", "team_a": "🇩🇪 Germany", "team_b": "🇨🇼 Curacao", "date": "June 15, 2026", "time": "12:00AM (UTC+7)"},
-    {"match_id": 10, "stage": "Matchday 1", "info": "Group F", "team_a": "🇳🇱 Netherlands", "team_b": "🇯🇵 Japan", "date": "June 15, 2026", "time": "3:00AM (UTC+7)"},
-    {"match_id": 11, "stage": "Matchday 1", "info": "Group E", "team_a": "🇨🇮 Ivory Coast", "team_b": "🇪🇨 Ecuador", "date": "June 15, 2026", "time": "6:00AM (UTC+7)"},
-    {"match_id": 12, "stage": "Matchday 1", "info": "Group F", "team_a": "🇸🇪 Sweden", "team_b": "🇹🇳 Tunisia", "date": "June 15, 2026", "time": "9:00AM (UTC+7)"},
-    {"match_id": 13, "stage": "Matchday 1", "info": "Group H", "team_a": "🇪🇸 Spain", "team_b": "🇨🇻 Cabo Verde", "date": "June 15, 2026", "time": "11:00PM (UTC+7)"},
-    {"match_id": 14, "stage": "Matchday 1", "info": "Group G", "team_a": "🇧🇪 Belgium", "team_b": "🇪🇬 Egypt", "date": "June 16, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 15, "stage": "Matchday 1", "info": "Group H", "team_a": "🇸🇦 Saudi Arabia", "team_b": "🇺🇾 Uruguay", "date": "June 16, 2026", "time": "5:00AM (UTC+7)"},
-    {"match_id": 16, "stage": "Matchday 1", "info": "Group G", "team_a": "🇮🇷 Iran", "team_b": "🇳🇿 New Zealand", "date": "June 16, 2026", "time": "8:00AM (UTC+7)"},
-    {"match_id": 17, "stage": "Matchday 1", "info": "Group I", "team_a": "🇫🇷 France", "team_b": "🇸🇳 Senegal", "date": "June 17, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 18, "stage": "Matchday 1", "info": "Group I", "team_a": "🇮🇶 Iraq", "team_b": "🇳🇴 Norway", "date": "June 17, 2026", "time": "5:00AM (UTC+7)"},
-    {"match_id": 19, "stage": "Matchday 1", "info": "Group J", "team_a": "🇦🇷 Argentina", "team_b": "🇩🇿 Algeria", "date": "June 17, 2026", "time": "8:00AM (UTC+7)"},
-    {"match_id": 20, "stage": "Matchday 1", "info": "Group J", "team_a": "🇦🇹 Austria", "team_b": "🇯🇴 Jordan", "date": "June 17, 2026", "time": "11:00AM (UTC+7)"},
-    {"match_id": 21, "stage": "Matchday 1", "info": "Group K", "team_a": "🇵🇹 Portugal", "team_b": "🇨🇩 Congo DR", "date": "June 18, 2026", "time": "12:00AM (UTC+7)"},
-    {"match_id": 22, "stage": "Matchday 1", "info": "Group L", "team_a": "🏴󠁧󠁢󠁥󠁮󠁧󠁿 England", "team_b": "🇭🇷 Croatia", "date": "June 18, 2026", "time": "3:00AM (UTC+7)"},
-    {"match_id": 23, "stage": "Matchday 1", "info": "Group L", "team_a": "🇬🇭 Ghana", "team_b": "🇵🇦 Panama", "date": "June 18, 2026", "time": "6:00AM (UTC+7)"},
-    {"match_id": 24, "stage": "Matchday 1", "info": "Group K", "team_a": "🇺🇿 Uzbekistan", "team_b": "🇨🇴 Colombia", "date": "June 18, 2026", "time": "9:00AM (UTC+7)"},
-    
-    {"match_id": 25, "stage": "Matchday 2", "info": "Group A", "team_a": "🇨🇿 Czechia", "team_b": "🇿🇦 South Africa", "date": "June 18, 2026", "time": "11:00PM (UTC+7)"},
-    {"match_id": 26, "stage": "Matchday 2", "info": "Group B", "team_a": "🇨🇭 Switzerland", "team_b": "🇧🇦 Bosnia and Herzegovina", "date": "June 19, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 27, "stage": "Matchday 2", "info": "Group B", "team_a": "🇨🇦 Canada", "team_b": "🇶🇦 Qatar", "date": "June 19, 2026", "time": "5:00AM (UTC+7)"},
-    {"match_id": 28, "stage": "Matchday 2", "info": "Group A", "team_a": "🇲🇽 Mexico", "team_b": "🇰🇷 Korea Republic", "date": "June 19, 2026", "time": "8:00AM (UTC+7)"},
-    {"match_id": 29, "stage": "Matchday 2", "info": "Group D", "team_a": "🇺🇸 USA", "team_b": "🇦🇺 Australia", "date": "June 20, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 30, "stage": "Matchday 2", "info": "Group C", "team_a": "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland", "team_b": "🇲🇦 Morocco", "date": "June 20, 2026", "time": "5:00AM (UTC+7)"},
-    {"match_id": 31, "stage": "Matchday 2", "info": "Group C", "team_a": "🇧🇷 Brazil", "team_b": "🇭🇹 Haiti", "date": "June 20, 2026", "time": "7:30AM (UTC+7)"},
-    {"match_id": 32, "stage": "Matchday 2", "info": "Group D", "team_a": "🇹🇷 Turkiye", "team_b": "🇵🇾 Paraguay", "date": "June 20, 2026", "time": "10:00AM (UTC+7)"},
-    {"match_id": 33, "stage": "Matchday 2", "info": "Group F", "team_a": "🇳🇱 Netherlands", "team_b": "🇸🇪 Sweden", "date": "June 21, 2026", "time": "12:00AM (UTC+7)"},
-    {"match_id": 34, "stage": "Matchday 2", "info": "Group E", "team_a": "🇩🇪 Germany", "team_b": "🇨🇮 Ivory Coast", "date": "June 21, 2026", "time": "3:00AM (UTC+7)"},
-    {"match_id": 35, "stage": "Matchday 2", "info": "Group E", "team_a": "🇪🇨 Ecuador", "team_b": "🇨🇼 Curacao", "date": "June 21, 2026", "time": "7:00AM (UTC+7)"},
-    {"match_id": 36, "stage": "Matchday 2", "info": "Group F", "team_a": "🇹🇳 Tunisia", "team_b": "🇯🇵 Japan", "date": "June 21, 2026", "time": "11:00AM (UTC+7)"},
-    {"match_id": 37, "stage": "Matchday 2", "info": "Group H", "team_a": "🇪🇸 Spain", "team_b": "🇸🇦 Saudi Arabia", "date": "June 21, 2026", "time": "11:00PM (UTC+7)"},
-    {"match_id": 38, "stage": "Matchday 2", "info": "Group G", "team_a": "🇧🇪 Belgium", "team_b": "🇪🇬 Egypt", "date": "June 22, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 39, "stage": "Matchday 2", "info": "Group H", "team_a": "🇺🇾 Uruguay", "team_b": "🇨🇻 Cabo Verde", "date": "June 22, 2026", "time": "5:00AM (UTC+7)"},
-    {"match_id": 40, "stage": "Matchday 2", "info": "Group G", "team_a": "🇳🇿 New Zealand", "team_b": "🇮🇷 Iran", "date": "June 22, 2026", "time": "8:00AM (UTC+7)"},
-    {"match_id": 41, "stage": "Matchday 2", "info": "Group J", "team_a": "🇦🇷 Argentina", "team_b": "🇦🇹 Austria", "date": "June 23, 2026", "time": "12:00AM (UTC+7)"},
-    {"match_id": 42, "stage": "Matchday 2", "info": "Group I", "team_a": "🇫🇷 France", "team_b": "🇮🇶 Iraq", "date": "June 23, 2026", "time": "4:00AM (UTC+7)"},
-    {"match_id": 43, "stage": "Matchday 2", "info": "Group I", "team_a": "🇳🇴 Norway", "team_b": "🇸🇳 Senegal", "date": "June 23, 2026", "time": "7:00AM (UTC+7)"},
-    {"match_id": 44, "stage": "Matchday 2", "info": "Group J", "team_a": "🇯🇴 Jordan", "team_b": "🇩🇿 Algeria", "date": "June 23, 2026", "time": "10:00AM (UTC+7)"},
-    {"match_id": 45, "stage": "Matchday 2", "info": "Group K", "team_a": "🇵🇹 Portugal", "team_b": "🇺🇿 Uzbekistan", "date": "June 24, 2026", "time": "12:00AM (UTC+7)"},
-    {"match_id": 46, "stage": "Matchday 2", "info": "Group L", "team_a": "🏴󠁧󠁢󠁥󠁮󠁧󠁿 England", "team_b": "🇬🇭 Ghana", "date": "June 24, 2026", "time": "3:00AM (UTC+7)"},
-    {"match_id": 47, "stage": "Matchday 2", "info": "Group K", "team_a": "🇵🇦 Panama", "team_b": "🇭🇷 Croatia", "date": "June 24, 2026", "time": "6:00AM (UTC+7)"},
-    {"match_id": 48, "stage": "Matchday 2", "info": "Group L", "team_a": "🇨🇴 Colombia", "team_b": "🇨🇩 Congo DR", "date": "June 24, 2026", "time": "9:00AM (UTC+7)"},
-    
-    {"match_id": 49, "stage": "Matchday 3", "info": "Group B", "team_a": "🇧🇦 Bosnia and Herzegovina", "team_b": "🇶🇦 Qatar", "date": "June 25, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 50, "stage": "Matchday 3", "info": "Group B", "team_a": "🇨🇭 Switzerland", "team_b": "🇨🇦 Canada", "date": "June 25, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 51, "stage": "Matchday 3", "info": "Group C", "team_a": "🇲🇦 Morocco", "team_b": "🇭🇹 Haiti", "date": "June 25, 2026", "time": "5:00AM (UTC+7)"},
-    {"match_id": 52, "stage": "Matchday 3", "info": "Group C", "team_a": "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland", "team_b": "🇧🇷 Brazil", "date": "June 25, 2026", "time": "5:00AM (UTC+7)"},
-    {"match_id": 53, "stage": "Matchday 3", "info": "Group A", "team_a": "🇨🇿 Czechia", "team_b": "🇲🇽 Mexico", "date": "June 25, 2026", "time": "8:00AM (UTC+7)"},
-    {"match_id": 54, "stage": "Matchday 3", "info": "Group A", "team_a": "🇿🇦 South Africa", "team_b": "🇰🇷 Korea Republic", "date": "June 25, 2026", "time": "8:00AM (UTC+7)"},
-    {"match_id": 55, "stage": "Matchday 3", "info": "Group E", "team_a": "🇨🇼 Curacao", "team_b": "🇨🇮 Ivory Coast", "date": "June 26, 2026", "time": "3:00AM (UTC+7)"},
-    {"match_id": 56, "stage": "Matchday 3", "info": "Group E", "team_a": "🇪🇨 Ecuador", "team_b": "🇩🇪 Germany", "date": "June 26, 2026", "time": "3:00AM (UTC+7)"},
-    {"match_id": 57, "stage": "Matchday 3", "info": "Group F", "team_a": "🇯🇵 Japan", "team_b": "🇸🇪 Sweden", "date": "June 26, 2026", "time": "6:00AM (UTC+7)"},
-    {"match_id": 58, "stage": "Matchday 3", "info": "Group F", "team_a": "🇹🇳 Tunisia", "team_b": "🇳🇱 Netherlands", "date": "June 26, 2026", "time": "6:00AM (UTC+7)"},
-    {"match_id": 59, "stage": "Matchday 3", "info": "Group D", "team_a": "🇵🇾 Paraguay", "team_b": "🇦🇺 Australia", "date": "June 26, 2026", "time": "9:00AM (UTC+7)"},
-    {"match_id": 60, "stage": "Matchday 3", "info": "Group D", "team_a": "🇹🇷 Turkiye", "team_b": "🇺🇸 USA", "date": "June 26, 2026", "time": "9:00AM (UTC+7)"},
-    {"match_id": 61, "stage": "Matchday 3", "info": "Group I", "team_a": "🇳🇴 Norway", "team_b": "🇫🇷 France", "date": "June 27, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 62, "stage": "Matchday 3", "info": "Group I", "team_a": "🇸🇳 Senegal", "team_b": "🇮🇶 Iraq", "date": "June 27, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 63, "stage": "Matchday 3", "info": "Group H", "team_a": "🇨🇻 Cabo Verde", "team_b": "🇸🇦 Saudi Arabia", "date": "June 27, 2026", "time": "7:00AM (UTC+7)"},
-    {"match_id": 64, "stage": "Matchday 3", "info": "Group H", "team_a": "🇺🇾 Uruguay", "team_b": "🇪🇸 Spain", "date": "June 27, 2026", "time": "7:00AM (UTC+7)"},
-    {"match_id": 65, "stage": "Matchday 3", "info": "Group G", "team_a": "🇪🇬 Egypt", "team_b": "🇳🇿 New Zealand", "date": "June 27, 2026", "time": "10:00AM (UTC+7)"},
-    {"match_id": 66, "stage": "Matchday 3", "info": "Group G", "team_a": "🇮🇷 Iran", "team_b": "🇧🇪 Belgium", "date": "June 27, 2026", "time": "10:00AM (UTC+7)"},
-    {"match_id": 67, "stage": "Matchday 3", "info": "Group L", "team_a": "🇭🇷 Croatia", "team_b": "🇬🇭 Ghana", "date": "June 28, 2026", "time": "4:00AM (UTC+7)"},
-    {"match_id": 68, "stage": "Matchday 3", "info": "Group L", "team_a": "🇵🇦 Panama", "team_b": "🏴󠁧󠁢󠁥󠁮󠁧󠁿 England", "date": "June 28, 2026", "time": "4:00AM (UTC+7)"},
-    {"match_id": 69, "stage": "Matchday 3", "info": "Group K", "team_a": "🇨🇴 Colombia", "team_b": "🇵🇹 Portugal", "date": "June 28, 2026", "time": "6:30AM (UTC+7)"},
-    {"match_id": 70, "stage": "Matchday 3", "info": "Group K", "team_a": "🇨🇩 Congo DR", "team_b": "🇺🇿 Uzbekistan", "date": "June 28, 2026", "time": "6:30AM (UTC+7)"},
-    {"match_id": 71, "stage": "Matchday 3", "info": "Group J", "team_a": "🇩🇿 Algeria", "team_b": "🇦🇹 Austria", "date": "June 28, 2026", "time": "9:00AM (UTC+7)"},
-    {"match_id": 72, "stage": "Matchday 3", "info": "Group J", "team_a": "🇯🇴 Jordan", "team_b": "🇦🇷 Argentina", "date": "June 28, 2026", "time": "9:00AM (UTC+7)"},
-    
-    {"match_id": 73, "stage": "Round of 32", "info": "Round of 32 Match 1", "team_a": "Runner-up Group A", "team_b": "Runner-up Group B", "date": "June 29, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 74, "stage": "Round of 32", "info": "Round of 32 Match 2", "team_a": "Winner Group C", "team_b": "Runner-up Group F", "date": "June 30, 2026", "time": "12:00AM (UTC+7)"},
-    {"match_id": 75, "stage": "Round of 32", "info": "Round of 32 Match 3", "team_a": "Winner Group E", "team_b": "3rd Group A/B/C/D/F", "date": "June 30, 2026", "time": "3:30AM (UTC+7)"},
-    {"match_id": 76, "stage": "Round of 32", "info": "Round of 32 Match 4", "team_a": "Winner Group F", "team_b": "Runner-up Group C", "date": "June 30, 2026", "time": "8:00AM (UTC+7)"},
-    {"match_id": 77, "stage": "Round of 32", "info": "Round of 32 Match 5", "team_a": "Runner-up Group E", "team_b": "Runner-up Group I", "date": "July 1, 2026", "time": "12:00AM (UTC+7)"},
-    {"match_id": 78, "stage": "Round of 32", "info": "Round of 32 Match 6", "team_a": "Winner Group I", "team_b": "3rd Group C/D/F/G/H", "date": "July 1, 2026", "time": "4:00AM (UTC+7)"},
-    {"match_id": 79, "stage": "Round of 32", "info": "Round of 32 Match 7", "team_a": "Winner Group A", "team_b": "3rd Group C/E/F/H/I", "date": "July 1, 2026", "time": "8:00AM (UTC+7)"},
-    {"match_id": 80, "stage": "Round of 32", "info": "Round of 32 Match 8", "team_a": "Winner Group L", "team_b": "3rd Group E/H/I/J/K", "date": "July 1, 2026", "time": "11:00PM (UTC+7)"},
-    {"match_id": 81, "stage": "Round of 32", "info": "Round of 32 Match 9", "team_a": "Winner Group G", "team_b": "3rd Group A/E/H/I/J", "date": "July 2, 2026", "time": "3:00AM (UTC+7)"},
-    {"match_id": 82, "stage": "Round of 32", "info": "Round of 32 Match 10", "team_a": "Winner Group D", "team_b": "3rd Group B/E/F/I/J", "date": "July 2, 2026", "time": "7:00AM (UTC+7)"},
-    {"match_id": 83, "stage": "Round of 32", "info": "Round of 32 Match 11", "team_a": "Winner Group H", "team_b": "Runner-up Group J", "date": "July 3, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 84, "stage": "Round of 32", "info": "Round of 32 Match 12", "team_a": "Runner-up Group K", "team_b": "Runner-up Group L", "date": "July 3, 2026", "time": "6:00AM (UTC+7)"},
-    {"match_id": 85, "stage": "Round of 32", "info": "Round of 32 Match 13", "team_a": "Winner Group B", "team_b": "3rd Group E/F/G/I/J", "date": "July 3, 2026", "time": "10:00AM (UTC+7)"},
-    {"match_id": 86, "stage": "Round of 32", "info": "Round of 32 Match 14", "team_a": "Runner-up Group D", "team_b": "Runner-up Group G", "date": "July 4, 2026", "time": "1:00AM (UTC+7)"},
-    {"match_id": 87, "stage": "Round of 32", "info": "Round of 32 Match 15", "team_a": "Winner Group J", "team_b": "Runner-up Group H", "date": "July 4, 2026", "time": "5:00AM (UTC+7)"},
-    {"match_id": 88, "stage": "Round of 32", "info": "Round of 32 Match 16", "team_a": "Winner Group K", "team_b": "3rd Group D/E/I/J/L", "date": "July 4, 2026", "time": "8:30AM (UTC+7)"},
-    
-    {"match_id": 89, "stage": "Round of 16", "info": "Round of 16 Match 1", "team_a": "Winner R32 Match 1", "team_b": "Winner R32 Match 4", "date": "July 5, 2026", "time": "12:00AM (UTC+7)"},
-    {"match_id": 90, "stage": "Round of 16", "info": "Round of 16 Match 2", "team_a": "Winner R32 Match 3", "team_b": "Winner R32 Match 6", "date": "July 5, 2026", "time": "4:00AM (UTC+7)"},
-    {"match_id": 91, "stage": "Round of 16", "info": "Round of 16 Match 3", "team_a": "Winner R32 Match 2", "team_b": "Winner R32 Match 5", "date": "July 6, 2026", "time": "3:00AM (UTC+7)"},
-    {"match_id": 92, "stage": "Round of 16", "info": "Round of 16 Match 4", "team_a": "Winner R32 Match 7", "team_b": "Winner R32 Match 8", "date": "July 6, 2026", "time": "7:00AM (UTC+7)"},
-    {"match_id": 93, "stage": "Round of 16", "info": "Round of 16 Match 5", "team_a": "Winner R32 Match 12", "team_b": "Winner R32 Match 11", "date": "July 7, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 94, "stage": "Round of 16", "info": "Round of 16 Match 6", "team_a": "Winner R32 Match 10", "team_b": "Winner R32 Match 9", "date": "July 7, 2026", "time": "7:00AM (UTC+7)"},
-    {"match_id": 95, "stage": "Round of 16", "info": "Round of 16 Match 7", "team_a": "Winner R32 Match 15", "team_b": "Winner R32 Match 14", "date": "July 7, 2026", "time": "11:00PM (UTC+7)"},
-    {"match_id": 96, "stage": "Round of 16", "info": "Round of 16 Match 8", "team_a": "Winner R32 Match 13", "team_b": "Winner R32 Match 16", "date": "July 8, 2026", "time": "3:00AM (UTC+7)"},
-    
-    {"match_id": 97, "stage": "Quarterfinals", "info": "Quarterfinals Match 1", "team_a": "Winner R16 Match 1", "team_b": "Winner R16 Match 2", "date": "July 10, 2026", "time": "3:00AM (UTC+7)"},
-    {"match_id": 98, "stage": "Quarterfinals", "info": "Quarterfinals Match 2", "team_a": "Winner R16 Match 5", "team_b": "Winner R16 Match 6", "date": "July 11, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 99, "stage": "Quarterfinals", "info": "Quarterfinals Match 3", "team_a": "Winner R16 Match 3", "team_b": "Winner R16 Match 4", "date": "July 12, 2026", "time": "4:00AM (UTC+7)"},
-    {"match_id": 100, "stage": "Quarterfinals", "info": "Quarterfinals Match 4", "team_a": "Winner R16 Match 7", "team_b": "Winner R16 Match 8", "date": "July 12, 2026", "time": "8:00AM (UTC+7)"},
-    
-    {"match_id": 101, "stage": "Semifinals", "info": "Semifinals Match 1", "team_a": "Winner QF Match 1", "team_b": "Winner QF Match 2", "date": "July 15, 2026", "time": "2:00AM (UTC+7)"},
-    {"match_id": 102, "stage": "Semifinals", "info": "Semifinals Match 2", "team_a": "Winner QF Match 3", "team_b": "Winner QF Match 4", "date": "July 16, 2026", "time": "2:00AM (UTC+7)"},
-    
-    {"match_id": 103, "stage": "3rd Place Match", "info": "Bronze Final", "team_a": "Loser SF Match 1", "team_b": "Loser SF Match 2", "date": "July 19, 2026", "time": "4:00AM (UTC+7)"},
-    
-    {"match_id": 104, "stage": "Final", "info": "World Cup Final", "team_a": "Winner SF Match 1", "team_b": "Winner SF Match 2", "date": "July 20, 2026", "time": "2:00AM (UTC+7)"}
-]
+DEFAULT_USER = "PRO PLAYER"  # Straight access profile name
 
 RESULTS_FILE = "global_settled_results.json"
 REQUESTS_FILE = "global_balance_requests.json"
+ADMIN_PASSWORD = "master"
 
 # -------------------------------------------------------------------------
 # PERSISTENT SYSTEM READ/WRITE UTILITIES
@@ -171,12 +45,8 @@ def save_balance_requests(requests_list):
     with open(REQUESTS_FILE, "w") as f:
         json.dump(requests_list, f)
 
-def get_user_file(username):
-    safe_name = "".join(c for c in username if c.isalnum() or c in (' ', '_', '-')).strip()
-    return f"user_{safe_name.lower()}.json"
-
-def load_user_data(username):
-    filename = get_user_file(username)
+def load_user_data(username: str):
+    filename = f"user_{username.lower()}.json"
     if os.path.exists(filename):
         try:
             with open(filename, "r") as f:
@@ -186,16 +56,10 @@ def load_user_data(username):
                 return data
         except:
             pass
-    return {"password": None, "balance": 1000.0, "bets": {}, "processed_payouts": []}
+    return {"balance": 1000.0, "bets": {}, "processed_payouts": []}
 
-def save_user_data(username, password, balance, bets, processed_payouts):
-    filename = get_user_file(username)
-    data = {
-        "password": password,
-        "balance": balance,
-        "bets": bets,
-        "processed_payouts": list(processed_payouts)
-    }
+def save_user_data(username: str, data: dict):
+    filename = f"user_{username.lower()}.json"
     with open(filename, "w") as f:
         json.dump(data, f)
 
@@ -211,44 +75,21 @@ def calculate_odds(team_a, team_b):
     return round(1 / win_prob_a, 2), round(1 / draw_prob, 2), round(1 / win_prob_b, 2)
 
 # -------------------------------------------------------------------------
-# PROFILE SIGN-IN STEP
+# AUTO ACCESS MEMORY SYNC & INITIALIZATION (LOGIN FREE ENTRY)
 # -------------------------------------------------------------------------
+username_input = DEFAULT_USER
+
 if "current_user" not in st.session_state:
-    st.title(f"💸 {APP_TITLE}")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.write("### 👤 Player Profile Sign-In")
-        username_input = st.text_input("Profile Name:", value="").strip()
-        password_input = st.text_input("Profile Password Key:", type="password", value="").strip()
-        submit_login = st.button("Enter")
-        
-    if submit_login:
-        if not username_input or not password_input:
-            st.error("⚠️ Both Profile Name and Password are required.")
-        else:
-            user_profile = load_user_data(username_input)
-            if user_profile.get("password") is not None:
-                if user_profile["password"] != password_input:
-                    st.error("❌ Incorrect profile password!")
-                    st.stop()
-            else:
-                user_profile["password"] = password_input
-                save_user_data(username_input, password_input, user_profile["balance"], user_profile["bets"], user_profile["processed_payouts"])
+    user_profile = load_user_data(username_input)
+    st.session_state.current_user = username_input
+    st.session_state.balance = user_profile["balance"]
+    st.session_state.bets = user_profile["bets"]
+    st.session_state.processed_payouts = list(user_profile["processed_payouts"])
+    st.session_state.matches = INITIAL_MATCHES.copy()
+    st.session_state.reset_cycle = 0
 
-            st.session_state.current_user = username_input
-            st.session_state.user_password = password_input
-            st.session_state.balance = user_profile["balance"]
-            st.session_state.bets = user_profile["bets"]
-            st.session_state.processed_payouts = list(user_profile["processed_payouts"])
-            st.session_state.matches = INITIAL_MATCHES.copy()
-            st.session_state.reset_cycle = 0
-            st.rerun()
-    else:
-        st.stop()
-
-# --- REAL-TIME WALLET PAYOUT UPDATE PATTERN ---
-username_input = st.session_state.current_user
-user_password = st.session_state.user_password
+# --- SYNC FROM FILE STORAGE ---
+user_profile = load_user_data(username_input)
 global_results = load_global_results()
 payout_happened = False
 
@@ -261,12 +102,14 @@ for match_id, user_bet in list(st.session_state.bets.items()):
         payout_happened = True
 
 if payout_happened:
-    save_user_data(username_input, user_password, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
+    user_profile["balance"] = st.session_state.balance
+    user_profile["processed_payouts"] = st.session_state.processed_payouts
+    save_user_data(username_input, user_profile)
 
 cycle = st.session_state.reset_cycle
 
 # -------------------------------------------------------------------------
-# SIDEBAR NAVIGATION CONTROLS
+# SIDEBAR NAVIGATION CONTROLS (UPSCALE SIZING OVERRIDES)
 # -------------------------------------------------------------------------
 st.markdown(
     """
@@ -280,20 +123,20 @@ st.markdown(
 )
 
 with st.sidebar:
-    st.write(f"Logged in as: **{username_input.upper()}**")
+    st.write(f"Active Profile: **{username_input.upper()}**")
     menu_selection = st.radio("Navigate System:", ["🕹️ Hub", "💰 Balance", "🏆 Leaderboard"], index=0)
     st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
     
     with st.expander("🛠️ Admin Panel"):
         admin_password = st.text_input("Access Token Key", type="password")
-        if admin_password == "master":
+        if admin_password == ADMIN_PASSWORD:
             st.caption("🟢 Admin Control Authenticated")
             
             # -------------------------------------------------------------
-            # NEW COMPONENT: PASSWORD RECOVERY MANAGER
+            # USER LIST VIEW
             # -------------------------------------------------------------
             st.divider()
-            st.markdown("#### 🔑 User Account & Password Manager")
+            st.markdown("#### 🔑 Global Accounts Overview")
             
             user_files = glob.glob("user_*.json")
             user_credentials = []
@@ -302,10 +145,9 @@ with st.sidebar:
                 try:
                     with open(file_path, "r") as f:
                         u_data = json.load(f)
-                    display_name = file_path.replace("user_", "").replace(".json", "").upper()
+                    display_name = os.path.basename(file_path).replace("user_", "").replace(".json", "").upper()
                     user_credentials.append({
                         "Username": display_name,
-                        "Password Key": u_data.get("password", "N/A"),
                         "Balance": f"${u_data.get('balance', 0.0):.2f}"
                     })
                 except:
@@ -314,38 +156,11 @@ with st.sidebar:
             if not user_credentials:
                 st.info("No user profiles detected.")
             else:
-                # Displays a scannable credential roster for quick checks
                 st.dataframe(user_credentials, use_container_width=True)
-                
-                st.caption("🔧 Direct Password Override")
-                target_user_to_fix = st.selectbox("Select account to recover:", [u["Username"] for u in user_credentials])
-                new_password_input = st.text_input("Assign New Password:", value="")
-                
-                if st.button("Force Update Password"):
-                    if new_password_input.strip() == "":
-                        st.error("Password cannot be blank.")
-                    else:
-                        safe_name = "".join(c for c in target_user_to_fix if c.isalnum() or c in (' ', '_', '-')).strip().lower()
-                        target_filename = f"user_{safe_name}.json"
-                        
-                        try:
-                            with open(target_filename, "r") as f:
-                                current_file_data = json.load(f)
-                            
-                            current_file_data["password"] = new_password_input.strip()
-                            
-                            with open(target_filename, "w") as f:
-                                json.dump(current_file_data, f)
-                                
-                            st.success(f"✅ Reset password for {target_user_to_fix} to: {new_password_input}")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error writing to system file: {e}")
             
             # -------------------------------------------------------------
-            # END OF PASSWORD RECOVERY TOOLS
+            # BALANCE REQUEST QUEUE WITH REASONS
             # -------------------------------------------------------------
-            
             st.divider()
             st.markdown("#### 📥 Balance Request Queue")
             pending_requests = load_balance_requests()
@@ -354,12 +169,14 @@ with st.sidebar:
             else:
                 for idx, req in enumerate(pending_requests):
                     st.write(f"**Player:** {req['user'].upper()} | **Amount:** ${req['amount']:.2f}")
+                    st.info(f"💬 **Reason given:** *\"{req.get('reason', 'No reason specified')}\"*")
+                    
                     col_app, col_rej = st.columns(2)
                     if col_app.button("Approve", key=f"app_{idx}"):
                         target_user = req['user']
                         t_data = load_user_data(target_user)
                         t_data["balance"] += req['amount']
-                        save_user_data(target_user, t_data["password"], t_data["balance"], t_data["bets"], t_data["processed_payouts"])
+                        save_user_data(target_user, t_data)
                         if target_user.lower() == username_input.lower():
                             st.session_state.balance = t_data["balance"]
                         pending_requests.pop(idx)
@@ -375,7 +192,10 @@ with st.sidebar:
                 st.session_state.balance = 1000.0
                 st.session_state.bets = {}
                 st.session_state.processed_payouts = []
-                save_user_data(username_input, user_password, 1000.0, {}, [])
+                user_profile["balance"] = 1000.0
+                user_profile["bets"] = {}
+                user_profile["processed_payouts"] = []
+                save_user_data(username_input, user_profile)
                 st.session_state.reset_cycle += 1
                 st.rerun()
             if st.button("🚨 Wipe All Match Results GLOBALLY"):
@@ -447,7 +267,9 @@ if menu_selection == "🕹️ Hub":
                             if st.button("Submit Bet Slip", key=f"btn_{match_id}_c{cycle}"):
                                 st.session_state.bets[match_id] = {"choice": choice, "amount": bet_amount, "odds": odds_map[choice]}
                                 st.session_state.balance -= bet_amount
-                                save_user_data(username_input, user_password, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
+                                user_profile["balance"] = st.session_state.balance
+                                user_profile["bets"] = st.session_state.bets
+                                save_user_data(username_input, user_profile)
                                 st.success("Bet securely logged into history registry!")
                                 st.rerun()
                 st.divider()
@@ -469,11 +291,20 @@ elif menu_selection == "💰 Balance":
     st.subheader("💳 Request Deposit Authorization")
     deposit_amount = st.number_input("Specify Deposit Volume ($):", min_value=10.0, max_value=500.0, value=500.0, step=50.0)
     
+    deposit_reason = st.text_area("State your reason for this request:", value="", placeholder="e.g., Please approve this request to back up my next series of bids.")
+    
     if st.button("Submit Balance Request to Admin Queue", use_container_width=True):
-        current_requests = load_balance_requests()
-        current_requests.append({"user": username_input, "amount": deposit_amount})
-        save_balance_requests(current_requests)
-        st.success(f"✅ Request for ${deposit_amount:.2f} dispatched successfully.")
+        if deposit_reason.strip() == "":
+            st.error("⚠️ You must provide a reason to request funds!")
+        else:
+            current_requests = load_balance_requests()
+            current_requests.append({
+                "user": username_input, 
+                "amount": deposit_amount,
+                "reason": deposit_reason.strip()
+            })
+            save_balance_requests(current_requests)
+            st.success(f"✅ Request for ${deposit_amount:.2f} dispatched successfully.")
 
     st.divider()
     st.subheader("📊 Performance Ledger History")
@@ -507,7 +338,6 @@ elif menu_selection == "🏆 Leaderboard":
     st.title("🏆 Profit Standings Leaderboard")
     st.divider()
     
-    # Inline rendering matrix engine for standings leaderboard
     leaderboard_records = []
     user_files = glob.glob("user_*.json")
     
@@ -516,7 +346,7 @@ elif menu_selection == "🏆 Leaderboard":
             with open(file_path, "r") as f:
                 data = json.load(f)
                 
-            display_name = file_path.replace("user_", "").replace(".json", "").upper()
+            display_name = os.path.basename(file_path).replace("user_", "").replace(".json", "").upper()
             bets = {int(k): v for k, v in data.get("bets", {}).items()}
             
             total_winnings = 0.0
@@ -551,3 +381,6 @@ elif menu_selection == "🏆 Leaderboard":
         )
         st.balloons()
         st.success(f"🥇 Current frontrunner dominating the ranks: **{leaderboard_records[0]['Player']}**!")
+
+st.markdown("---")
+st.caption("🤖 PAYGONE Simulator Engine • Calculated using live FIFA Performance Indices.")
