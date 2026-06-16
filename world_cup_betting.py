@@ -6,6 +6,7 @@ import os
 # DATABASE PATHS & UTILITIES
 # -------------------------------------------------------------------------
 RESULTS_FILE = "global_settled_results.json"
+REQUESTS_FILE = "global_balance_requests.json"
 
 def load_global_results():
     if os.path.exists(RESULTS_FILE):
@@ -20,6 +21,19 @@ def load_global_results():
 def save_global_results(results_dict):
     with open(RESULTS_FILE, "w") as f:
         json.dump(results_dict, f)
+
+def load_balance_requests():
+    if os.path.exists(REQUESTS_FILE):
+        try:
+            with open(REQUESTS_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_balance_requests(requests_list):
+    with open(REQUESTS_FILE, "w") as f:
+        json.dump(requests_list, f)
 
 def get_user_file(username):
     safe_name = "".join(c for c in username if c.isalnum() or c in (' ', '_', '-')).strip()
@@ -262,18 +276,15 @@ cycle = st.session_state.reset_cycle
 st.markdown(
     """
     <style>
-        /* Target the Radio text header element */
         [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
             font-size: 22px !important;
             font-weight: bold !important;
             color: #ffffff !important;
         }
-        /* Target the individual radio item options/labels text */
         [data-testid="stSidebar"] label[data-testid="stRadioOption"] p {
             font-size: 20px !important;
             font-weight: 500 !important;
         }
-        /* Make the internal radio bullet gaps slightly bigger for ease of use */
         [data-testid="stSidebar"] gap {
             gap: 15px !important;
         }
@@ -291,6 +302,36 @@ with st.sidebar:
         admin_password = st.text_input("Access Token Key", type="password")
         if admin_password == "master":
             st.caption("Admin Mode")
+            
+            # --- ADMIN ACTION: BALANCE REQUESTS APPROVAL SECTION ---
+            st.markdown("#### 📥 Balance Request Queue")
+            pending_requests = load_balance_requests()
+            if not pending_requests:
+                st.info("No balance reloads awaiting validation.")
+            else:
+                for idx, req in enumerate(pending_requests):
+                    st.write(f"**Player:** {req['user'].upper()} | **Amount:** ${req['amount']:.2f}")
+                    col_app, col_rej = st.columns(2)
+                    if col_app.button("Approve", key=f"app_{idx}"):
+                        target_user = req['user']
+                        t_data = load_user_data(target_user)
+                        t_data["balance"] += req['amount']
+                        save_user_data(target_user, t_data["password"], t_data["balance"], t_data["bets"], t_data["processed_payouts"])
+                        
+                        # If current admin session is also the requestor, update local session tracking dynamically
+                        if target_user.lower() == username_input.lower():
+                            st.session_state.balance = t_data["balance"]
+                            
+                        pending_requests.pop(idx)
+                        save_balance_requests(pending_requests)
+                        st.rerun()
+                        
+                    if col_rej.button("Reject", key=f"rej_{idx}"):
+                        pending_requests.pop(idx)
+                        save_balance_requests(pending_requests)
+                        st.rerun()
+            st.divider()
+            
             if st.button("🔴 Reset Loaded Wallet Data", type="primary"):
                 st.session_state.balance = 1000.0
                 st.session_state.bets = {}
@@ -316,11 +357,10 @@ with st.sidebar:
 # -------------------------------------------------------------------------
 # 4. MAIN LAYOUT CONTAINER
 # -------------------------------------------------------------------------
-# Always output application tracking header at the very top of pages
 st.markdown(f"## 🏆 {APP_TITLE}")
 
 if menu_selection == "🕹️ Hub":
-    st.title("🕹️ Live Betting Hub")
+    st.title("🕹️ Betting Hub")
     st.caption("Select a tournament tier tab below to browse match listings. Minimum bet requirement: **$100.00**.")
     st.divider()
 
@@ -352,7 +392,7 @@ if menu_selection == "🕹️ Hub":
                         else:
                             st.error(f"✅ Result: **{final_outcome}** | **LOSE ❌** (-${user_bet['amount']:.2f})")
                     else:
-                        st.info(f"✅ Result: **{final_outcome}** | No stake locked.")
+                        st.info(f"✅ Result: **{final_outcome}** | No bet placed")
                 else:
                     st.write(f"**Live Odds:** {team_a}: **{odds_a}** | Draw: **{odds_draw}** | {team_b}: **{odds_b}**")
                     choice = st.radio("Pick outcome:", [team_a, "Draw", team_b], key=f"pick_{match_id}_c{cycle}", horizontal=True)
@@ -390,13 +430,13 @@ elif menu_selection == "💰 Balance":
         st.metric(label="Total Generated Winning Revenue", value=f"${total_payout_earnings:.2f}")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("💳 Instant Capital Deposit Portal")
+    st.subheader("💳 Request Deposit Authorization")
     deposit_amount = st.number_input("Specify Deposit Volume ($):", min_value=10.0, max_value=25000.0, value=500.0, step=100.0)
-    if st.button("Confirm Allocation and Update Ledger", use_container_width=True):
-        st.session_state.balance += deposit_amount
-        save_user_data(username_input, user_password, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
-        st.toast(f"Ledger altered! Added ${deposit_amount:.2f} safely.", icon="📈")
-        st.rerun()
+    if st.button("Submit Balance Request to Admin Queue", use_container_width=True):
+        current_requests = load_balance_requests()
+        current_requests.append({"user": username_input, "amount": deposit_amount})
+        save_balance_requests(current_requests)
+        st.success(f"✅ Request for ${deposit_amount:.2f} dispatched successfully. Waiting for admin approval.")
 
     st.divider()
     st.subheader("📊 Performance Ledger History")
