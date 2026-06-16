@@ -7,6 +7,7 @@ import glob
 # CONSTANTS & MODULAR DATA IMPORT
 # -------------------------------------------------------------------------
 from matches import FIFA_SCORES, INITIAL_MATCHES
+from real_results import render_real_results_page
 
 APP_TITLE = "PAYGONE - FIFA WORLD CUP 2026 BETTING SIMULATOR"
 RESULTS_FILE = "global_settled_results.json"
