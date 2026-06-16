@@ -32,15 +32,16 @@ def load_user_data(username):
             with open(filename, "r") as f:
                 data = json.load(f)
                 data["bets"] = {int(k): v for k, v in data.get("bets", {}).items()}
-                data["processed_payouts"] = list(data.get("processed_payouts", []))
+                data["processed_payouts"] = [int(x) for x in data.get("processed_payouts", [])]
                 return data
         except:
             pass
-    return {"balance": 670.0, "bets": {}, "processed_payouts": []}
+    return {"password": None, "balance": 1000.0, "bets": {}, "processed_payouts": []}
 
-def save_user_data(username, balance, bets, processed_payouts):
+def save_user_data(username, password, balance, bets, processed_payouts):
     filename = get_user_file(username)
     data = {
+        "password": password,
         "balance": balance,
         "bets": bets,
         "processed_payouts": list(processed_payouts)
@@ -49,22 +50,21 @@ def save_user_data(username, balance, bets, processed_payouts):
         json.dump(data, f)
 
 # -------------------------------------------------------------------------
-# 1. FIFA WORLD RANKING POINTS DATA WITH EMOJI FLAGS
+# 1. FIFA WORLD RANKING POINTS DATA
 # -------------------------------------------------------------------------
 FIFA_SCORES = {
-    "🇦🇷 Argentina": 1877.27, "🇪🇸 Spain": 1874.71, "🇫🇷 France": 1870.70, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 England": 1828.02,
-    "🇵🇹 Portugal": 1767.85, "🇧🇷 Brazil": 1765.86, "🇲🇦 Morocco": 1755.10, "🇳🇱 Netherlands": 1753.57,
-    "🇧🇪 Belgium": 1742.24, "🇩🇪 Germany": 1735.77, "🇭🇷 Croatia": 1714.87, "🇨🇴 Colombia": 1698.35,
-    "🇲🇽 Mexico": 1687.48, "🇸🇳 Senegal": 1684.07, "🇺🇾 Uruguay": 1673.07, "🇺🇸 USA": 1671.23,
-    "🇯🇵 Japan": 1661.58, "🇨🇭 Switzerland": 1650.06, "🇮🇷 Iran": 1619.58, "🇹🇷 Turkiye": 1605.73,
-    "🇪🇨 Ecuador": 1598.52, "🇦🇹 Austria": 1597.40, "🇰🇷 Korea Republic": 1591.63, "🇦🇺 Australia": 1579.34,
-    "🇩🇿 Algeria": 1571.03, "🇪🇬 Egypt": 1562.37, "🇨🇦 Canada": 1559.48, "🇳🇴 Norway": 1557.44,
-    "🇨🇮 Ivory Coast": 1540.87, "🇵🇦 Panama": 1539.16, "🇸🇪 Sweden": 1509.79, "🇨🇿 Czechia": 1505.74,
-    "🇵🇾 Paraguay": 1505.35, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland": 1503.34, "🇹🇳 Tunisia": 1476.41, "🇨🇩 Congo DR": 1747.43,
-    "🇺🇿 Uzbekistan": 1458.20, "🇶🇦 Qatar": 1450.31, "🇮🇶 Iraq": 1446.28, "🇿🇦 South Africa": 1428.38,
-    "🇸🇦 Saudi Arabia": 1423.88, "🇯🇴 Jordan": 1387.74, "🇧🇦 Bosnia and Herzegovina": 1387.22,
-    "🇨🇻 Cabo Verde": 1371.11, "🇬🇭 Ghana": 1346.88, "🇨🇼 Curacao": 1294.77, "🇭🇹 Haiti": 1293.10,
-    "🇳🇿 New Zealand": 1275.58
+    "🇲🇽 Mexico": 1687.48, "🇿🇦 South Africa": 1428.38, "🇰🇷 Korea Republic": 1591.63, "🇨🇿 Czechia": 1505.74,
+    "🇨🇦 Canada": 1559.48, "🇧🇦 Bosnia and Herzegovina": 1387.22, "🇺🇸 USA": 1671.23, "🇵🇾 Paraguay": 1505.35,
+    "🇶🇦 Qatar": 1450.31, "🇨🇭 Switzerland": 1650.06, "🇧🇷 Brazil": 1765.86, "🇲🇦 Morocco": 1755.10,
+    "🇭🇹 Haiti": 1293.10, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland": 1503.34, "🇦🇺 Australia": 1579.34, "🇹🇷 Turkiye": 1605.73,
+    "🇩🇪 Germany": 1735.77, "🇨🇼 Curacao": 1294.77, "🇳🇱 Netherlands": 1753.57, "🇯🇵 Japan": 1661.58,
+    "🇨🇮 Ivory Coast": 1540.87, "🇪🇨 Ecuador": 1598.52, "🇸🇪 Sweden": 1509.79, "🇹🇳 Tunisia": 1476.41,
+    "🇪🇸 Spain": 1874.71, "🇨🇻 Cabo Verde": 1371.11, "🇧🇪 Belgium": 1742.24, "🇪🇬 Egypt": 1562.37,
+    "🇸🇦 Saudi Arabia": 1423.88, "🇺🇾 Uruguay": 1673.07, "🇮🇷 Iran": 1619.58, "🇳🇿 New Zealand": 1275.58,
+    "🇫🇷 France": 1870.70, "🇸🇳 Senegal": 1684.07, "🇮🇶 Iraq": 1446.28, "🇳🇴 Norway": 1557.44,
+    "🇦🇷 Argentina": 1877.27, "🇩🇿 Algeria": 1571.03, "🇦🇹 Austria": 1597.40, "🇯🇴 Jordan": 1387.74,
+    "🇵🇹 Portugal": 1767.85, "🇨🇩 Congo DR": 1747.43, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 England": 1828.02, "🇭🇷 Croatia": 1714.87,
+    "🇬🇭 Ghana": 1346.88, "🇵🇦 Panama": 1539.16, "🇺🇿 Uzbekistan": 1458.20, "🇨🇴 Colombia": 1698.35
 }
 
 INITIAL_MATCHES = [
@@ -202,158 +202,229 @@ def calculate_odds(team_a, team_b):
 # -------------------------------------------------------------------------
 # 2. PROFILE SIGN-IN STEP
 # -------------------------------------------------------------------------
+APP_TITLE = "PAYGONE - FIFA WORLD CUP 2026 BETTING SIMULATOR"
+
 if "current_user" not in st.session_state:
-    st.title("💸 PayGone - FIFA World Cup 2026 Betting Simulator")
-    
-    # Center login UI using columns
+    st.title(f"💸 {APP_TITLE}")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.write("### 👤 Player Profile ID")
-        username_input = st.text_input("Enter Profile Name to Load Wallet:", value="").strip()
-        submit_login = st.button("Access Dashboard & Save Sync")
+        st.write("### 👤 Player Profile Sign-In")
+        username_input = st.text_input("Profile Name:", value="").strip()
+        password_input = st.text_input("Profile Password Key:", type="password", value="").strip()
+        submit_login = st.button("Enter")
         
-    if submit_login and username_input:
-        user_profile = load_user_data(username_input)
-        st.session_state.current_user = username_input
-        st.session_state.balance = user_profile["balance"]
-        st.session_state.bets = user_profile["bets"]
-        st.session_state.processed_payouts = list(user_profile["processed_payouts"])
-        st.session_state.matches = INITIAL_MATCHES.copy()
-        if 'reset_cycle' not in st.session_state:
+    if submit_login:
+        if not username_input or not password_input:
+            st.error("⚠️ Both Profile Name and Password are required.")
+        else:
+            user_profile = load_user_data(username_input)
+            if user_profile.get("password") is not None:
+                if user_profile["password"] != password_input:
+                    st.error("❌ Incorrect profile password!")
+                    st.stop()
+            else:
+                user_profile["password"] = password_input
+                save_user_data(username_input, password_input, user_profile["balance"], user_profile["bets"], user_profile["processed_payouts"])
+
+            st.session_state.current_user = username_input
+            st.session_state.user_password = password_input
+            st.session_state.balance = user_profile["balance"]
+            st.session_state.bets = user_profile["bets"]
+            st.session_state.processed_payouts = list(user_profile["processed_payouts"])
+            st.session_state.matches = INITIAL_MATCHES.copy()
             st.session_state.reset_cycle = 0
-        st.rerun()
+            st.rerun()
     else:
         st.stop()
 
-# --- RE-ESTABLISH STATE VARIABLES FOR CONTINUITY ---
+# --- REAL-TIME WALLET PAYOUT UPDATE PATTERN ---
 username_input = st.session_state.current_user
+user_password = st.session_state.user_password
 global_results = load_global_results()
 payout_happened = False
 
-for match_id in list(st.session_state.bets.keys()):
+for match_id, user_bet in list(st.session_state.bets.items()):
     if match_id in global_results and match_id not in st.session_state.processed_payouts:
         actual_winner = global_results[match_id]
-        user_bet = st.session_state.bets[match_id]
         if user_bet['choice'] == actual_winner:
             st.session_state.balance += (user_bet['amount'] * user_bet['odds'])
         st.session_state.processed_payouts.append(match_id)
         payout_happened = True
 
 if payout_happened:
-    save_user_data(username_input, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
+    save_user_data(username_input, user_password, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
 
 cycle = st.session_state.reset_cycle
 
 # -------------------------------------------------------------------------
-# 3. REGULAR PLAYER INTERFACE
+# 3. SIDEBAR NAVIGATION CONTROLS
 # -------------------------------------------------------------------------
-header_left, header_right = st.columns([2, 1])
-with header_left:
-    st.title("💸 PayGone")
-    st.caption(f"Active Account: **{username_input.upper()}** — Progress auto-saved!")
-with header_right:
-    st.metric(label="Wallet Balance", value=f"${st.session_state.balance:.2f}")
+st.markdown(
+    """
+    <style>
+        /* Target the Radio text header element */
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+            font-size: 22px !important;
+            font-weight: bold !important;
+            color: #ffffff !important;
+        }
+        /* Target the individual radio item options/labels text */
+        [data-testid="stSidebar"] label[data-testid="stRadioOption"] p {
+            font-size: 20px !important;
+            font-weight: 500 !important;
+        }
+        /* Make the internal radio bullet gaps slightly bigger for ease of use */
+        [data-testid="stSidebar"] gap {
+            gap: 15px !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-st.divider()
-
-# All tournament tabs cleanly tracked
-subtab_list = ["Matchday 1", "Matchday 2", "Matchday 3", "Round of 32", "Round of 16", "Quarterfinals", "Semifinals", "3rd Place Match", "Final"]
-subtabs = st.tabs(subtab_list)
-
-for index, stage_name in enumerate(subtab_list):
-    with subtabs[index]:
-        st.header(f"Tournament Stage: {stage_name}")
-        stage_matches = [m for m in st.session_state.matches if m['stage'] == stage_name]
-        
-        for m in stage_matches:
-            match_id = m['match_id']
-            team_a, team_b = m['team_a'], m['team_b']
-            odds_a, odds_draw, odds_b = calculate_odds(team_a, team_b)
-            odds_map = {team_a: odds_a, "Draw": odds_draw, team_b: odds_b}
-            
-            st.write(f"### {m['info']} — {team_a} vs. {team_b}")
-            st.write(f"📅 **Date:** {m['date']} | ⏰ **Time:** {m['time']}")
-            
-            if match_id in global_results:
-                final_outcome = global_results[match_id]
-                if match_id in st.session_state.bets:
-                    user_bet = st.session_state.bets[match_id]
-                    if user_bet['choice'] == final_outcome:
-                        st.success(f"✅ Result: **{final_outcome}** | **WIN 🎉** (+${user_bet['amount'] * user_bet['odds']:.2f})")
-                    else:
-                        st.error(f"✅ Result: **{final_outcome}** | **LOSE ❌** (-${user_bet['amount']:.2f})")
-                else:
-                    st.info(f"✅ Result: **{final_outcome}** | No bet placed.")
-            else:
-                st.write(f"**Live Odds:** {team_a}: **{odds_a}** | Draw: **{odds_draw}** | {team_b}: **{odds_b}**")
-                choice = st.radio("Pick an outcome:", [team_a, "Draw", team_b], key=f"pick_{match_id}_c{cycle}", horizontal=True)
-                
-                if st.session_state.balance < 1.0:
-                    st.error("📉 Balance depleted!")
-                else:
-                    default_bet = min(10.0, float(st.session_state.balance))
-                    bet_amount = st.number_input("Betting Amount ($)", min_value=1.0, max_value=float(st.session_state.balance), value=default_bet, key=f"amt_{match_id}_c{cycle}")
-                    
-                    if match_id in st.session_state.bets:
-                        current_bet = st.session_state.bets[match_id]
-                        st.info(f"🔒 Locked: ${current_bet['amount']} on **{current_bet['choice']}**")
-                    else:
-                        if st.button("Submit PayGone Bet", key=f"btn_{match_id}_c{cycle}"):
-                            st.session_state.bets[match_id] = {"choice": choice, "amount": bet_amount, "odds": odds_map[choice]}
-                            st.session_state.balance -= bet_amount
-                            save_user_data(username_input, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
-                            st.success(f"Bet secured!")
-                            st.rerun()
-            st.divider()
-
-# -------------------------------------------------------------------------
-# 4. HIDDEN ADMIN ENGINE
-# -------------------------------------------------------------------------
-st.sidebar.markdown("<br><br><br><br><br>", unsafe_allow_html=True) # Push it deep down
-with st.sidebar.expander("🛠️"):
-    password = st.text_input("Access Token Key", type="password")
-    if password == "master":
-        st.caption(f"Authenticated Dashboard — Administering **{username_input.upper()}**")
-        
-        st.subheader("🧹 System Reset Controls")
-        if st.button("🔴 Reset Loaded Wallet Data", type="primary"):
-            st.session_state.balance = 670.0
-            st.session_state.bets = {}
-            st.session_state.processed_payouts = []
-            save_user_data(username_input, 670.0, {}, [])
-            st.session_state.reset_cycle += 1 
-            st.toast("Profile wallet wiped back to $670!", icon="🔄")
-            st.rerun()
-            
-        if st.button("🚨 Wipe All Match Results GLOBALLY"):
-            save_global_results({})
-            st.toast("All matches unlocked globally!", icon="🔓")
-            st.rerun()
-            
-        st.divider()
-        st.subheader("🏁 Resolve Live Matches Globally")
-        open_fixtures = [m for m in st.session_state.matches if m['match_id'] not in global_results]
-        
-        if not open_fixtures:
-            st.info("All matches successfully closed.")
-            
-        for m in open_fixtures:
-            match_id = m['match_id']
-            team_a, team_b = m['team_a'], m['team_b']
-            st.write(f"**Resolve [{m['stage']}]:** {team_a} vs {team_b}")
-            actual_result = st.selectbox("Select Official Winner:", [team_a, "Draw", team_b], key=f"admin_res_{match_id}_c{cycle}")
-            
-            if st.button("Publish Official Result", key=f"admin_btn_{match_id}_c{cycle}"):
-                current_live_results = load_global_results()
-                current_live_results[match_id] = actual_result
-                save_global_results(current_live_results)
-                
-                if match_id in st.session_state.bets and match_id not in st.session_state.processed_payouts:
-                    user_bet = st.session_state.bets[match_id]
-                    if user_bet['choice'] == actual_result:
-                        st.session_state.balance += (user_bet['amount'] * user_bet['odds'])
-                    st.session_state.processed_payouts.append(match_id)
-                    save_user_data(username_input, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
-                
-                st.toast(f"Result pushed globally!", icon="📣")
+with st.sidebar:
+    st.write(f"Logged in as: **{username_input.upper()}**")
+    menu_selection = st.radio("Navigate System:", ["🕹️ Hub", "💰 Balance"], index=0)
+    
+    st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
+    with st.expander("🛠️"):
+        admin_password = st.text_input("Access Token Key", type="password")
+        if admin_password == "master":
+            st.caption("Admin Mode")
+            if st.button("🔴 Reset Loaded Wallet Data", type="primary"):
+                st.session_state.balance = 1000.0
+                st.session_state.bets = {}
+                st.session_state.processed_payouts = []
+                save_user_data(username_input, user_password, 1000.0, {}, [])
+                st.session_state.reset_cycle += 1
                 st.rerun()
+            if st.button("🚨 Wipe All Match Results GLOBALLY"):
+                save_global_results({})
+                st.rerun()
+            
+            st.divider()
+            open_fixtures = [m for m in st.session_state.matches if m['match_id'] not in global_results]
+            for m in open_fixtures:
+                match_id = m['match_id']
+                actual_result = st.selectbox(f"Winner: {m['team_a']} vs {m['team_b']}", [m['team_a'], "Draw", m['team_b']], key=f"admin_res_{match_id}_c{cycle}")
+                if st.button("Publish Result", key=f"admin_btn_{match_id}_c{cycle}"):
+                    current_live_results = load_global_results()
+                    current_live_results[match_id] = actual_result
+                    save_global_results(current_live_results)
+                    st.rerun()
+
+# -------------------------------------------------------------------------
+# 4. MAIN LAYOUT CONTAINER
+# -------------------------------------------------------------------------
+# Always output application tracking header at the very top of pages
+st.markdown(f"## 🏆 {APP_TITLE}")
+
+if menu_selection == "🕹️ Hub":
+    st.title("🕹️ Live Betting Hub")
+    st.caption("Select a tournament tier tab below to browse match listings. Minimum bet requirement: **$100.00**.")
+    st.divider()
+
+    subtab_list = ["Matchday 1", "Matchday 2", "Matchday 3", "Round of 32", "Round of 16", "Quarterfinals", "Semifinals", "3rd Place Match", "Final"]
+    subtabs = st.tabs(subtab_list)
+
+    for index, stage_name in enumerate(subtab_list):
+        with subtabs[index]:
+            stage_matches = [m for m in st.session_state.matches if m['stage'] == stage_name]
+            
+            if not stage_matches:
+                st.info("No schedule mapped for this block.")
+            
+            for m in stage_matches:
+                match_id = m['match_id']
+                team_a, team_b = m['team_a'], m['team_b']
+                odds_a, odds_draw, odds_b = calculate_odds(team_a, team_b)
+                odds_map = {team_a: odds_a, "Draw": odds_draw, team_b: odds_b}
+                
+                st.write(f"### {m['info']} — {team_a} vs. {team_b}")
+                st.write(f"📅 **Date:** {m['date']} | ⏰ **Time:** {m['time']}")
+                
+                if match_id in global_results:
+                    final_outcome = global_results[match_id]
+                    if match_id in st.session_state.bets:
+                        user_bet = st.session_state.bets[match_id]
+                        if user_bet['choice'] == final_outcome:
+                            st.success(f"✅ Result: **{final_outcome}** | **WIN 🎉** (+${user_bet['amount'] * user_bet['odds']:.2f})")
+                        else:
+                            st.error(f"✅ Result: **{final_outcome}** | **LOSE ❌** (-${user_bet['amount']:.2f})")
+                    else:
+                        st.info(f"✅ Result: **{final_outcome}** | No stake locked.")
+                else:
+                    st.write(f"**Live Odds:** {team_a}: **{odds_a}** | Draw: **{odds_draw}** | {team_b}: **{odds_b}**")
+                    choice = st.radio("Pick outcome:", [team_a, "Draw", team_b], key=f"pick_{match_id}_c{cycle}", horizontal=True)
+                    
+                    if st.session_state.balance < 100.0:
+                        st.error("📉 Insufficient Balance! Minimum required wager is $100.00. Go to 'Balance' panel to reload funds.")
+                    else:
+                        bet_amount = st.number_input("Wager Amount ($)", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, step=50.0, key=f"amt_{match_id}_c{cycle}")
+                        
+                        if match_id in st.session_state.bets:
+                            current_bet = st.session_state.bets[match_id]
+                            st.info(f"🔒 Active Stake locked: ${current_bet['amount']} on **{current_bet['choice']}**")
+                        else:
+                            if st.button("Submit Bet Slip", key=f"btn_{match_id}_c{cycle}"):
+                                st.session_state.bets[match_id] = {"choice": choice, "amount": bet_amount, "odds": odds_map[choice]}
+                                st.session_state.balance -= bet_amount
+                                save_user_data(username_input, user_password, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
+                                st.success("Bet securely logged into history registry!")
+                                st.rerun()
+                st.divider()
+
+elif menu_selection == "💰 Balance":
+    st.title("💰 Balance & Financial Logs")
+    st.write("Review active assets, execute structural wallet reloads, or observe overall historic yields.")
+    st.divider()
+
+    m_col1, m_col2 = st.columns(2)
+    with m_col1:
+        st.metric(label="Current Available Liquid Balance", value=f"${st.session_state.balance:.2f}")
+    with m_col2:
+        total_payout_earnings = 0.0
+        for mid, bet in st.session_state.bets.items():
+            if mid in global_results and global_results[mid] == bet['choice']:
+                total_payout_earnings += (bet['amount'] * bet['odds'])
+        st.metric(label="Total Generated Winning Revenue", value=f"${total_payout_earnings:.2f}")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("💳 Instant Capital Deposit Portal")
+    deposit_amount = st.number_input("Specify Deposit Volume ($):", min_value=10.0, max_value=25000.0, value=500.0, step=100.0)
+    if st.button("Confirm Allocation and Update Ledger", use_container_width=True):
+        st.session_state.balance += deposit_amount
+        save_user_data(username_input, user_password, st.session_state.balance, st.session_state.bets, st.session_state.processed_payouts)
+        st.toast(f"Ledger altered! Added ${deposit_amount:.2f} safely.", icon="📈")
+        st.rerun()
+
+    st.divider()
+    st.subheader("📊 Performance Ledger History")
+    
+    if not st.session_state.bets:
+        st.info("No logs present on this profile context yet.")
+    else:
+        for mid, bet in st.session_state.bets.items():
+            m = next((match for match in st.session_state.matches if match['match_id'] == mid), None)
+            if m:
+                if mid in global_results:
+                    is_winner = bet['choice'] == global_results[mid]
+                    status_banner = "🟢 WON PAYOUT" if is_winner else "🔴 LOST SLIP"
+                else:
+                    status_banner = "🟡 OPEN PROPOSITION"
+                
+                with st.expander(f"{status_banner} — {m['team_a']} vs {m['team_b']}"):
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.write(f"**Predicted Outcome:** {bet['choice']}")
+                        st.write(f"**Initial Locked Amount:** ${bet['amount']:.2f}")
+                    with col_b:
+                        st.write(f"**Odds Multiple:** x{bet['odds']}")
+                        if mid in global_results:
+                            st.write(f"**Official Field Result:** {global_results[mid]}")
+                            if is_winner:
+                                st.markdown(f"**Net Received Return:** <span style='color:green'>+${bet['amount'] * bet['odds']:.2f}</span>", unsafe_allow_html=True)
+                            else:
+                                st.markdown(f"**Net Loss Value:** <span style='color:red'>-${bet['amount']:.2f}</span>", unsafe_allow_html=True)
+                        else:
+                            st.caption("Waiting for tournament resolution data updates...")
