@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import glob
+from filelock import FileLock
 
 # -------------------------------------------------------------------------
 # CONSTANTS & MODULAR DATA IMPORT
@@ -15,52 +16,64 @@ REQUESTS_FILE = "global_balance_requests.json"
 ADMIN_PASSWORD = "master"
 
 # -------------------------------------------------------------------------
-# PERSISTENT SYSTEM READ/WRITE UTILITIES
+# CONCURRENCY-SAFE READ/WRITE UTILITIES
 # -------------------------------------------------------------------------
 def load_global_results():
-    if os.path.exists(RESULTS_FILE):
-        try:
-            with open(RESULTS_FILE, "r") as f:
-                data = json.load(f)
-                return {int(k): v for k, v in data.items()}
-        except:
-            return {}
-    return {}
+    lock = FileLock(f"{RESULTS_FILE}.lock")
+    with lock:
+        if os.path.exists(RESULTS_FILE):
+            try:
+                with open(RESULTS_FILE, "r") as f:
+                    data = json.load(f)
+                    return {int(k): v for k, v in data.items()}
+            except:
+                return {}
+        return {}
 
 def save_global_results(results_dict):
-    with open(RESULTS_FILE, "w") as f:
-        json.dump(results_dict, f)
+    lock = FileLock(f"{RESULTS_FILE}.lock")
+    with lock:
+        with open(RESULTS_FILE, "w") as f:
+            json.dump(results_dict, f)
 
 def load_balance_requests():
-    if os.path.exists(REQUESTS_FILE):
-        try:
-            with open(REQUESTS_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return []
-    return []
+    lock = FileLock(f"{REQUESTS_FILE}.lock")
+    with lock:
+        if os.path.exists(REQUESTS_FILE):
+            try:
+                with open(REQUESTS_FILE, "r") as f:
+                    return json.load(f)
+            except:
+                return []
+        return []
 
 def save_balance_requests(requests_list):
-    with open(REQUESTS_FILE, "w") as f:
-        json.dump(requests_list, f)
+    lock = FileLock(f"{REQUESTS_FILE}.lock")
+    with lock:
+        with open(REQUESTS_FILE, "w") as f:
+            json.dump(requests_list, f)
 
 def load_user_data(username: str):
     filename = f"user_{username.lower()}.json"
-    if os.path.exists(filename):
-        try:
-            with open(filename, "r") as f:
-                data = json.load(f)
-                data["bets"] = {int(k): v for k, v in data.get("bets", {}).items()}
-                data["processed_payouts"] = [int(x) for x in data.get("processed_payouts", [])]
-                return data
-        except:
-            pass
-    return {"password": "", "balance": 1000.0, "bets": {}, "processed_payouts": []}
+    lock = FileLock(f"{filename}.lock")
+    with lock:
+        if os.path.exists(filename):
+            try:
+                with open(filename, "r") as f:
+                    data = json.load(f)
+                    data["bets"] = {int(k): v for k, v in data.get("bets", {}).items()}
+                    data["processed_payouts"] = [int(x) for x in data.get("processed_payouts", [])]
+                    return data
+            except:
+                pass
+        return {"password": "", "balance": 1000.0, "bets": {}, "processed_payouts": []}
 
 def save_user_data(username: str, data: dict):
     filename = f"user_{username.lower()}.json"
-    with open(filename, "w") as f:
-        json.dump(data, f)
+    lock = FileLock(f"{filename}.lock")
+    with lock:
+        with open(filename, "w") as f:
+            json.dump(data, f)
 
 def calculate_odds(team_a, team_b):
     rating_a = FIFA_SCORES.get(team_a, 1500.0)
@@ -72,7 +85,7 @@ def calculate_odds(team_a, team_b):
     win_prob_b = prob_b * 0.8
     draw_prob = 0.20
     return round(1 / win_prob_a, 2), round(1 / draw_prob, 2), round(1 / win_prob_b, 2)
-
+            
 # -------------------------------------------------------------------------
 # SECURED LOGIN SYSTEM (WITH PASSWORD VALIDATION)
 # -------------------------------------------------------------------------
@@ -108,6 +121,7 @@ if "current_user" not in st.session_state:
             
             # Scenario A: Existing User -> Verify Password
             if os.path.exists(filename):
+                # FIXED: Swapped raw file reading out for thread-safe utility 
                 user_profile = load_user_data(username_input)
                 if user_profile.get("password") == password_input:
                     st.session_state.current_user = username_input
@@ -202,9 +216,9 @@ with st.sidebar:
             
             for file_path in user_files:
                 try:
-                    with open(file_path, "r") as f:
-                        u_data = json.load(f)
                     raw_name = os.path.basename(file_path).replace("user_", "").replace(".json", "")
+                    # FIXED: Swapped raw file reading out for thread-safe load utility
+                    u_data = load_user_data(raw_name)
                     display_name = raw_name.upper()
                     user_list_clean.append(raw_name)
                     
@@ -424,10 +438,11 @@ elif menu_selection == "🏆 Leaderboard":
     
     for file_path in user_files:
         try:
-            with open(file_path, "r") as f:
-                data = json.load(f)
+            raw_name = os.path.basename(file_path).replace("user_", "").replace(".json", "")
+            # FIXED: Swapped raw file reading out for thread-safe load utility
+            data = load_user_data(raw_name)
                 
-            display_name = os.path.basename(file_path).replace("user_", "").replace(".json", "").upper()
+            display_name = raw_name.upper()
             bets = {int(k): v for k, v in data.get("bets", {}).items()}
             
             total_winnings = 0.0
@@ -462,7 +477,6 @@ elif menu_selection == "🏆 Leaderboard":
         st.balloons()
         st.success(f"🥇 Current frontrunner dominating the ranks: **{leaderboard_records[0]['Player']}**!")
 
-# --- ROUTER FOR THE MODULAR REAL RESULTS PAGE ---
 elif menu_selection == "⚽ Real Results":
     render_real_results_page()
 
