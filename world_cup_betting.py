@@ -361,6 +361,10 @@ st.markdown(f"## 🏆 {APP_TITLE}")
 
 if menu_selection == "🕹️ Hub":
     st.title("🕹️ Betting Hub")
+    
+    # --- DYNAMIC BALANCE METRIC DISPLAY IN HUB ---
+    st.metric(label="Your Current Balance", value=f"${st.session_state.balance:.2f}")
+    
     st.caption("Select a tournament tier tab below to browse match listings. Minimum bet requirement: **$100.00**.")
     st.divider()
 
