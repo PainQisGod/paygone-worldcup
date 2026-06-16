@@ -9,8 +9,6 @@ import glob
 from matches import FIFA_SCORES, INITIAL_MATCHES
 
 APP_TITLE = "PAYGONE - FIFA WORLD CUP 2026 BETTING SIMULATOR"
-DEFAULT_USER = "PRO PLAYER"  # Straight access profile name
-
 RESULTS_FILE = "global_settled_results.json"
 REQUESTS_FILE = "global_balance_requests.json"
 ADMIN_PASSWORD = "master"
@@ -75,20 +73,77 @@ def calculate_odds(team_a, team_b):
     return round(1 / win_prob_a, 2), round(1 / draw_prob, 2), round(1 / win_prob_b, 2)
 
 # -------------------------------------------------------------------------
-# AUTO ACCESS MEMORY SYNC & INITIALIZATION (LOGIN FREE ENTRY)
+# SECURED LOGIN SYSTEM
 # -------------------------------------------------------------------------
-username_input = DEFAULT_USER
-
 if "current_user" not in st.session_state:
-    user_profile = load_user_data(username_input)
-    st.session_state.current_user = username_input
-    st.session_state.balance = user_profile["balance"]
-    st.session_state.bets = user_profile["bets"]
-    st.session_state.processed_payouts = list(user_profile["processed_payouts"])
-    st.session_state.matches = INITIAL_MATCHES.copy()
-    st.session_state.reset_cycle = 0
+    st.title(f"🏆 {APP_TITLE}")
+    st.subheader("Please sign in to access your dashboard")
+    
+    username_input = st.text_input("Enter Username:", value="").strip()
+    password_input = st.text_input("Enter Password:", type="password", value="").strip()
+    
+    if st.button("Enter", use_container_width=True):
+        if username_input == "":
+            st.error("⚠️ Username field cannot be empty!")
+        elif password_input == "":
+            st.error("⚠️ Password field cannot be empty!")
+        
+        # --- Handle Admin Login ---
+        elif username_input.lower() == "admin":
+            if password_input == ADMIN_PASSWORD:
+                st.session_state.current_user = "Admin"
+                st.session_state.balance = 0.0
+                st.session_state.bets = {}
+                st.session_state.processed_payouts = []
+                st.session_state.matches = INITIAL_MATCHES.copy()
+                st.session_state.reset_cycle = 0
+                st.rerun()
+            else:
+                st.error("❌ Incorrect profile password!")
+                
+        # --- Handle Standard Player Login ---
+        else:
+            filename = f"user_{username_input.lower()}.json"
+            
+            # Scenario A: Existing User -> Verify Password
+            if os.path.exists(filename):
+                user_profile = load_user_data(username_input)
+                # Check if the saved password matches the input
+                if user_profile.get("password") == password_input:
+                    st.session_state.current_user = username_input
+                    st.session_state.balance = user_profile["balance"]
+                    st.session_state.bets = user_profile["bets"]
+                    st.session_state.processed_payouts = list(user_profile["processed_payouts"])
+                    st.session_state.matches = INITIAL_MATCHES.copy()
+                    st.session_state.reset_cycle = 0
+                    st.rerun()
+                else:
+                    st.error("❌ Incorrect profile password!")
+            
+            # Scenario B: Brand New User -> Account Registration
+            else:
+                # Create default starting data structure including their new password
+                new_profile = {
+                    "password": password_input,
+                    "balance": 1000.0,
+                    "bets": {},
+                    "processed_payouts": []
+                }
+                save_user_data(username_input, new_profile)
+                
+                # Log them into the newly created account immediately
+                st.session_state.current_user = username_input
+                st.session_state.balance = new_profile["balance"]
+                st.session_state.bets = new_profile["bets"]
+                st.session_state.processed_payouts = []
+                st.session_state.matches = INITIAL_MATCHES.copy()
+                st.session_state.reset_cycle = 0
+                st.success("🎉 New account registered securely!")
+                st.rerun()
+    st.stop()
 
-# --- SYNC FROM FILE STORAGE ---
+# --- RE-LOAD LOGGED-IN SESSION CONTEXT ---
+username_input = st.session_state.current_user
 user_profile = load_user_data(username_input)
 global_results = load_global_results()
 payout_happened = False
@@ -109,7 +164,7 @@ if payout_happened:
 cycle = st.session_state.reset_cycle
 
 # -------------------------------------------------------------------------
-# SIDEBAR NAVIGATION CONTROLS (UPSCALE SIZING OVERRIDES)
+# SIDEBAR NAVIGATION CONTROLS & LOGOUT
 # -------------------------------------------------------------------------
 st.markdown(
     """
@@ -125,7 +180,12 @@ st.markdown(
 with st.sidebar:
     st.write(f"Active Profile: **{username_input.upper()}**")
     menu_selection = st.radio("Navigate System:", ["🕹️ Hub", "💰 Balance", "🏆 Leaderboard"], index=0)
-    st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
+    
+    if st.button("🚪 Logout / Switch Account", use_container_width=True):
+        del st.session_state.current_user
+        st.rerun()
+        
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
     
     with st.expander("🛠️ Admin Panel"):
         admin_password = st.text_input("Access Token Key", type="password")
@@ -140,12 +200,16 @@ with st.sidebar:
             
             user_files = glob.glob("user_*.json")
             user_credentials = []
+            user_list_clean = [] # Keeps track of raw usernames for dropdowns
             
             for file_path in user_files:
                 try:
                     with open(file_path, "r") as f:
                         u_data = json.load(f)
-                    display_name = os.path.basename(file_path).replace("user_", "").replace(".json", "").upper()
+                    raw_name = os.path.basename(file_path).replace("user_", "").replace(".json", "")
+                    display_name = raw_name.upper()
+                    user_list_clean.append(raw_name)
+                    
                     user_credentials.append({
                         "Username": display_name,
                         "Balance": f"${u_data.get('balance', 0.0):.2f}"
@@ -157,6 +221,27 @@ with st.sidebar:
                 st.info("No user profiles detected.")
             else:
                 st.dataframe(user_credentials, use_container_width=True)
+            
+            # -------------------------------------------------------------
+            # NEW: FORCE RESET PASSWORD TOOL
+            # -------------------------------------------------------------
+            st.divider()
+            st.markdown("#### 🔄 Administrative Password Override")
+            if not user_list_clean:
+                st.info("No player accounts available to reset.")
+            else:
+                target_reset_user = st.selectbox("Select Profile to Modify:", options=user_list_clean, format_func=lambda x: x.upper())
+                new_forced_password = st.text_input("Assign New Password:", type="password", key="force_pw_input").strip()
+                
+                if st.button("Force Update Password", use_container_width=True, type="secondary"):
+                    if new_forced_password == "":
+                        st.error("⚠️ New password string cannot be empty!")
+                    else:
+                        # Load current user file, modify only the password field, and resave
+                        account_data = load_user_data(target_reset_user)
+                        account_data["password"] = new_forced_password
+                        save_user_data(target_reset_user, account_data)
+                        st.success(f"🔒 Password for account **{target_reset_user.upper()}** has been successfully changed!")
             
             # -------------------------------------------------------------
             # BALANCE REQUEST QUEUE WITH REASONS
