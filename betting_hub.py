@@ -1,13 +1,12 @@
 # betting_hub.py
 import streamlit as st
 import datetime
-import db_manager
-
-# Clean import from our new independent database manager!
-from db_manager import save_user_data
+from db_manager import save_user_data 
 
 def render_matches_tab(user_profile, username_input, global_results, cycle, calculate_odds):
-    # 🚩 1. Favorite Country Tracker
+    CURRENCY = " N-Dollars"
+    
+    # 🚩 Favorite Country Tracker
     fav_nation = user_profile.get("favorite_country", "")
     if fav_nation:
         with st.expander(f"⭐ TRACKER: Your Favorite Nation ({fav_nation.upper()})", expanded=True):
@@ -82,7 +81,7 @@ def render_matches_tab(user_profile, username_input, global_results, cycle, calc
                     status_emoji = "🟡" if p_status == "OPEN" else "🟢"
                     
                     with st.expander(f"{status_emoji} Parlay #{p_idx + 1} — Multiplier: {open_parlay['combined_odds']}x", expanded=False):
-                        st.markdown(f"**Wager Stake:** `${open_parlay['stake']:.2f}` | **Potential Return:** `${open_parlay['potential_payout']:.2f}`")
+                        st.markdown(f"**Wager Stake:** `{open_parlay['stake']:,.2f}{CURRENCY}` | **Potential Return:** `{open_parlay['potential_payout']:,.2f}{CURRENCY}`")
                         st.divider()
                         for m_id, leg in open_parlay["legs"].items():
                             if int(m_id) in global_results:
@@ -110,9 +109,9 @@ def render_matches_tab(user_profile, username_input, global_results, cycle, calc
                     if st.session_state.balance < 100.0:
                         st.error("📉 Insufficient Balance to back a parlay!")
                     else:
-                        parlay_wager = st.number_input(f"Stake Amount ($):", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, step=50.0, key=f"parlay_val_{stage_name}_c{cycle}")
+                        parlay_wager = st.number_input(f"Stake Amount ({CURRENCY.strip()}):", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, step=50.0, key=f"parlay_val_{stage_name}_c{cycle}")
                         pot_return = round(parlay_wager * accumulated_odds, 2)
-                        st.info(f"💰 **Estimated Winning Revenue Return:** `${pot_return:.2f}`")
+                        st.info(f"💰 **Estimated Winning Revenue Return:** `{pot_return:,.2f}{CURRENCY}`")
                         
                         p_col1, p_col2 = st.columns(2)
                         if p_col1.button("🔒 Authorize & Finalize Parlay", key=f"lock_parlay_{stage_name}", use_container_width=True, type="primary"):
@@ -129,7 +128,7 @@ def render_matches_tab(user_profile, username_input, global_results, cycle, calc
                             user_profile["parlays"].append(new_parlay_obj)
                             st.session_state.balance -= parlay_wager
                             user_profile["balance"] = st.session_state.balance
-                            db_manager.save_user_data(username_input, user_profile)
+                            save_user_data(username_input, user_profile)
                             
                             for purged_key in active_stage_cart.keys():
                                 del st.session_state.parlay_cart[purged_key]
@@ -164,7 +163,6 @@ def render_matches_tab(user_profile, username_input, global_results, cycle, calc
                 except:
                     is_locked = False
                 
-                # Settle checks
                 if int(match_id) in global_results:
                     res_data = global_results[int(match_id)]
                     final_outcome = res_data.get("outcome")
@@ -177,7 +175,7 @@ def render_matches_tab(user_profile, username_input, global_results, cycle, calc
                 elif is_locked:
                     st.warning("🔒 Wagers Locked! This match has already kicked off.")
                     if match_id in st.session_state.bets:
-                        st.info(f"📋 Locked Slip: Placed ${st.session_state.bets[match_id]['amount']:.2f} on **{st.session_state.bets[match_id]['choice']}**")
+                        st.info(f"📋 Locked Slip: Placed {st.session_state.bets[match_id]['amount']:,.2f}{CURRENCY} on **{st.session_state.bets[match_id]['choice']}**")
                 else:
                     st.write(f"**Live Odds:** {team_a}: **{odds_a}** | Draw: **{odds_draw}** | {team_b}: **{odds_b}**")
                     
@@ -188,16 +186,16 @@ def render_matches_tab(user_profile, username_input, global_results, cycle, calc
                         choice = st.radio("Pick outcome:", [team_a, "Draw", team_b], key=f"pick_{match_id}_c{cycle}", horizontal=True)
                         if betting_mode == "🎫 Single Match Bets":
                             if st.session_state.balance >= 100.0:
-                                bet_amount = st.number_input("Wager Amount ($)", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, step=50.0, key=f"amt_{match_id}_c{cycle}")
+                                bet_amount = st.number_input(f"Wager Amount ({CURRENCY.strip()})", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, step=50.0, key=f"amt_{match_id}_c{cycle}")
                                 if match_id in st.session_state.bets:
-                                    st.info(f"🔒 Active Stake locked: ${st.session_state.bets[match_id]['amount']} on **{st.session_state.bets[match_id]['choice']}**")
+                                    st.info(f"🔒 Active Stake locked: {st.session_state.bets[match_id]['amount']:,.2f}{CURRENCY} on **{st.session_state.bets[match_id]['choice']}**")
                                 else:
                                     if st.button("Submit Bet Slip", key=f"btn_{match_id}_c{cycle}"):
                                         st.session_state.bets[match_id] = {"choice": choice, "amount": bet_amount, "odds": odds_map[choice]}
                                         st.session_state.balance -= bet_amount
                                         user_profile["balance"] = st.session_state.balance
                                         user_profile["bets"] = st.session_state.bets
-                                        db_manager.save_user_data(username_input, user_profile)
+                                        save_user_data(username_input, user_profile)
                                         st.success("Bet securely logged!")
                                         st.rerun()
                         else:
