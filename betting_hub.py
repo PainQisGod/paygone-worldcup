@@ -1,6 +1,7 @@
 # betting_hub.py
 import streamlit as st
 import datetime
+import db_manager
 
 # Clean import from our new independent database manager!
 from db_manager import save_user_data
