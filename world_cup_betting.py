@@ -511,8 +511,11 @@ elif menu_selection == "🏆 Leaderboard":
         # Convert to DataFrame
         df = pd.DataFrame(leaderboard_records)
         
-        # 🔥 Sort by Current Balance in descending order
+        # Sort by Current Balance in descending order
         df = df.sort_values(by="Current Balance ($)", ascending=False).reset_index(drop=True)
+        
+        # 🔥 RIGHT HERE: Shift index by 1 so the ranking starts from 1 instead of 0
+        df.index = df.index + 1
         
         # Format columns with dollar signs for clean display layout
         df["Current Balance ($)"] = df["Current Balance ($)"].map("${:,.2f}".format)
