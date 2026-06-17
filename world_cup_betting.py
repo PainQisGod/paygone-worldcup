@@ -2,13 +2,14 @@ import streamlit as st
 import json
 import os
 import glob
+import datetime
 from filelock import FileLock
 
 # -------------------------------------------------------------------------
 # CONSTANTS & MODULAR DATA IMPORT
 # -------------------------------------------------------------------------
 from matches import FIFA_SCORES, INITIAL_MATCHES
-from real_results import render_real_results_page
+from real_results import render_real_results_page, REAL_WORLD_CUP_DATA, get_match_uid
 
 APP_TITLE = "PAYGONE - FIFA WORLD CUP 2026 BETTING SIMULATOR"
 RESULTS_FILE = "global_settled_results.json"
@@ -25,7 +26,20 @@ def load_global_results():
             try:
                 with open(RESULTS_FILE, "r") as f:
                     data = json.load(f)
-                    return {int(k): v for k, v in data.items()}
+                    parsed = {}
+                    for k, v in data.items():
+                        # FIX: Try to convert match IDs to integers for betting wallets.
+                        # If it's an MD5 string hash, keep it as a string key!
+                        try:
+                            key_converted = int(k)
+                        except ValueError:
+                            key_converted = str(k)
+                            
+                        if isinstance(v, dict):
+                            parsed[key_converted] = v
+                        else:
+                            parsed[key_converted] = {"outcome": v, "score_text": "Settled"}
+                    return parsed
             except:
                 return {}
         return {}
@@ -33,8 +47,10 @@ def load_global_results():
 def save_global_results(results_dict):
     lock = FileLock(f"{RESULTS_FILE}.lock")
     with lock:
+        # Convert all keys to strings right before writing to JSON file
+        stringified = {str(k): v for k, v in results_dict.items()}
         with open(RESULTS_FILE, "w") as f:
-            json.dump(results_dict, f)
+            json.dump(stringified, f)
 
 def load_balance_requests():
     lock = FileLock(f"{REQUESTS_FILE}.lock")
@@ -121,7 +137,6 @@ if "current_user" not in st.session_state:
             
             # Scenario A: Existing User -> Verify Password
             if os.path.exists(filename):
-                # FIXED: Swapped raw file reading out for thread-safe utility 
                 user_profile = load_user_data(username_input)
                 if user_profile.get("password") == password_input:
                     st.session_state.current_user = username_input
@@ -162,7 +177,7 @@ payout_happened = False
 
 for match_id, user_bet in list(st.session_state.bets.items()):
     if match_id in global_results and match_id not in st.session_state.processed_payouts:
-        actual_winner = global_results[match_id]
+        actual_winner = global_results[match_id].get("outcome")
         if user_bet['choice'] == actual_winner:
             st.session_state.balance += (user_bet['amount'] * user_bet['odds'])
         st.session_state.processed_payouts.append(match_id)
@@ -217,7 +232,6 @@ with st.sidebar:
             for file_path in user_files:
                 try:
                     raw_name = os.path.basename(file_path).replace("user_", "").replace(".json", "")
-                    # FIXED: Swapped raw file reading out for thread-safe load utility
                     u_data = load_user_data(raw_name)
                     display_name = raw_name.upper()
                     user_list_clean.append(raw_name)
@@ -298,17 +312,97 @@ with st.sidebar:
                 save_global_results({})
                 st.rerun()
             
+            # -------------------------------------------------------------
+            # MODULE A: 🌐 REAL WORLD CUP SCORE & STATUS DISPLAY UPDATER
+            # -------------------------------------------------------------
             st.divider()
-            open_fixtures = [m for m in st.session_state.matches if m['match_id'] not in global_results]
-            for m in open_fixtures:
-                match_id = m['match_id']
-                actual_result = st.selectbox(f"Winner: {m['team_a']} vs {m['team_b']}", [m['team_a'], "Draw", m['team_b']], key=f"admin_res_{match_id}_c{cycle}")
-                if st.button("Publish Result", key=f"admin_btn_{match_id}_c{cycle}"):
-                    current_live_results = load_global_results()
-                    current_live_results[match_id] = actual_result
-                    save_global_results(current_live_results)
-                    st.rerun()
+            st.markdown("#### 🌐 1. Update Real Match Display (Sidebar/Tab)")
+            st.caption("Changes what users see on the live scoreboards. Does NOT affect betting wallets.")
+            
+            rw_phase = st.selectbox("Select Display Phase:", list(REAL_WORLD_CUP_DATA.keys()), key=f"disp_phase_c{cycle}")
+            rw_categories = list(REAL_WORLD_CUP_DATA[rw_phase].keys())
+            rw_cat = st.selectbox("Select Display Category:", rw_categories, key=f"disp_cat_c{cycle}")
+            
+            rw_matches = REAL_WORLD_CUP_DATA[rw_phase][rw_cat]
+            rw_labels = [f"{m['team_a']} vs {m['team_b']} ({m['date']})" for m in rw_matches]
+            rw_idx = st.selectbox("Choose Display Fixture:", range(len(rw_labels)), format_func=lambda x: rw_labels[x], key=f"disp_idx_c{cycle}")
+            
+            target_rw_match = rw_matches[rw_idx]
+            real_uid = str(get_match_uid(rw_phase, rw_cat, target_rw_match['team_a'], target_rw_match['team_b']))
+            
+            # Read fresh file contents directly for UI defaults
+            ui_results = load_global_results()
+            existing_override = ui_results.get(real_uid, {})
+            
+            col_rw1, col_rw2 = st.columns(2)
+            with col_rw1:
+                default_score_val = existing_override.get("score_text", target_rw_match['score'])
+                new_real_score = st.text_input("Scoreline Text (e.g., '2 - 1'):", value=default_score_val, key=f"rw_disp_score_{real_uid}")
+            with col_rw2:
+                status_options = ["Scheduled", "Live", "Finished"]
+                default_status_idx = status_options.index(existing_override.get("status", target_rw_match['status']))
+                new_real_status = st.selectbox("Display Status:", status_options, index=default_status_idx, key=f"rw_disp_status_{real_uid}")
+                
+            if st.button("Publish Scoreboard Update", key=f"rw_disp_btn_{real_uid}", use_container_width=True):
+                # Pull freshest file state right inside button execution
+                db_state = load_global_results()
+                db_state[real_uid] = {
+                    "outcome": "Settled",
+                    "score_text": new_real_score.strip(),
+                    "status": new_real_status
+                }
+                save_global_results(db_state)
+                st.success("Scoreboard updated successfully without breaking bets!")
+                st.rerun()
 
+            # -------------------------------------------------------------
+            # MODULE B: 💰 REAL RESULTS WALLET SETTLEMENT TOOL
+            # -------------------------------------------------------------
+            st.divider()
+            st.markdown("#### 💰 2. Force Settle Active User Bets")
+            st.caption("Directly pays out money or marks tickets as losses based on the match ID.")
+            
+            # Dynamically look up settled match IDs
+            current_db = load_global_results()
+            open_fixtures = [m for m in st.session_state.matches if m['match_id'] not in current_db]
+            
+            if not open_fixtures:
+                st.info("All user bet slips have been entirely resolved!")
+            else:
+                bet_match_options = {f"Match #{m['match_id']}: {m['team_a']} vs {m['team_b']} ({m['stage']})": m for m in open_fixtures}
+                selected_bet_str = st.selectbox("Select Bet Target to Settle & Close:", list(bet_match_options.keys()), key=f"settle_bet_select_c{cycle}")
+                
+                if selected_bet_str:
+                    bm = bet_match_options[selected_bet_str]
+                    bet_match_id = int(bm['match_id']) # Store key strictly as int to process user loops
+                    bt_a = bm['team_a']
+                    bt_b = bm['team_b']
+                    
+                    st.markdown(f"Choose the **Official Result** to trigger user payouts:")
+                    outcome_choice = st.radio(
+                        "Winning Outcome:", 
+                        [bt_a, "Draw", bt_b], 
+                        key=f"outcome_choice_{bet_match_id}_c{cycle}", 
+                        horizontal=True
+                    )
+                    
+                    col_bs1, col_bs2 = st.columns(2)
+                    with col_bs1:
+                        final_goals_a = st.number_input(f"{bt_a} Final Goals", min_value=0, max_value=25, value=0, key=f"f_goals_a_{bet_match_id}")
+                    with col_bs2:
+                        final_goals_b = st.number_input(f"{bt_b} Final Goals", min_value=0, max_value=25, value=0, key=f"f_goals_b_{bet_match_id}")
+                    
+                    if st.button("Finalize Payouts & Close Wagers", key=f"payout_btn_{bet_match_id}", use_container_width=True, type="primary"):
+                        # Pull freshest file state right inside button execution
+                        db_state = load_global_results()
+                        db_state[bet_match_id] = {
+                            "outcome": outcome_choice,
+                            "score_text": f"{final_goals_a} - {final_goals_b}"
+                        }
+                        save_global_results(db_state)
+                        st.success(f"Processed wallet transactions for Match #{bet_match_id}!")
+                        st.rerun()
+                        
 # -------------------------------------------------------------------------
 # MAIN LAYOUT CONTAINER
 # -------------------------------------------------------------------------
@@ -338,8 +432,19 @@ if menu_selection == "🕹️ Hub":
                 st.write(f"### {m['info']} — {team_a} vs. {team_b}")
                 st.write(f"📅 **Date:** {m['date']} | ⏰ **Time:** {m['time']}")
                 
+                try:
+                    kickoff_str = f"{m['date']} 2026 {m['time']}"
+                    kickoff_datetime = datetime.datetime.strptime(kickoff_str, "%d %B %Y %I:%M%p")
+                    is_locked = datetime.datetime.now() >= kickoff_datetime
+                except:
+                    is_locked = False
+                
                 if match_id in global_results:
-                    final_outcome = global_results[match_id]
+                    res_data = global_results[match_id]
+                    final_outcome = res_data.get("outcome")
+                    score_string = res_data.get("score_text", "Settled")
+                    
+                    st.write(f"🔢 **Final Score:** {score_string}")
                     if match_id in st.session_state.bets:
                         user_bet = st.session_state.bets[match_id]
                         if user_bet['choice'] == final_outcome:
@@ -348,6 +453,15 @@ if menu_selection == "🕹️ Hub":
                             st.error(f"✅ Result: **{final_outcome}** | **LOSE ❌** (-${user_bet['amount']:.2f})")
                     else:
                         st.info(f"✅ Result: **{final_outcome}** | No bet placed")
+                
+                elif is_locked:
+                    st.warning("🔒 Wagers Locked! This match has already kicked off.")
+                    if match_id in st.session_state.bets:
+                        current_bet = st.session_state.bets[match_id]
+                        st.info(f"📋 Locked Slip: Placed ${current_bet['amount']:.2f} on **{current_bet['choice']}**")
+                    else:
+                        st.caption("No bet was registered before kickoff closure.")
+                        
                 else:
                     st.write(f"**Live Odds:** {team_a}: **{odds_a}** | Draw: **{odds_draw}** | {team_b}: **{odds_b}**")
                     choice = st.radio("Pick outcome:", [team_a, "Draw", team_b], key=f"pick_{match_id}_c{cycle}", horizontal=True)
@@ -379,10 +493,72 @@ elif menu_selection == "💰 Balance":
     with m_col2:
         total_payout_earnings = 0.0
         for mid, bet in st.session_state.bets.items():
-            if mid in global_results and global_results[mid] == bet['choice']:
-                total_payout_earnings += (bet['amount'] * bet['odds'])
+            if mid in global_results:
+                actual_outcome = global_results[mid].get("outcome")
+                if actual_outcome == bet['choice']:
+                    total_payout_earnings += (bet['amount'] * bet['odds'])
         st.metric(label="Total Generated Winning Revenue", value=f"${total_payout_earnings:.2f}")
 
+    # -------------------------------------------------------------------------
+    # PERFORMANCE TRAJECTORY CHART (CASE-INSENSITIVE RESOLUTION FIX)
+    # -------------------------------------------------------------------------
+    st.write("")
+    st.subheader("📊 Your Balance History Timeline")
+    
+    balance_history = [1000.0] 
+    chart_labels = ["Account Registration"]
+    current_running_balance = 1000.0
+    
+    COUNTRY_CODES = {
+        "argentina": "ARG", "france": "FRA", "spain": "ESP", "england": "ENG", "portugal": "POR",
+        "brazil": "BRA", "morocco": "MAR", "netherlands": "NED", "germany": "GER", "belgium": "BEL",
+        "croatia": "CRO", "mexico": "MEX", "colombia": "COL", "usa": "USA", "senegal": "SEN",
+        "japan": "JPN", "uruguay": "URU", "switzerlands": "SUI", "korea republic": "KOR", "australia": "AUS",
+        "iran": "IRN", "austria": "AUT", "turkiye": "TUR", "algeria": "ALG", "ecuador": "ECU",
+        "egypt": "EGY", "ivory coast": "CIV", "norway": "NOR", "canada": "CAN", "panama": "PAN",
+        "sweden": "SWE", "scotland": "SCO", "paraguay": "PAR", "czechia": "CZE", "congo dr": "COD",
+        "qatar": "QAT", "uzbekistan": "UZB", "tunisia": "TUN", "iraq": "IRQ", "saudi arabia": "KSA",
+        "south africa": "RSA", "bosnia and herzegovina": "BIH", "cabo verde": "CPV", "jordan": "JOR",
+        "ghana": "GHA", "new zealand": "NZL", "curacao": "CUW", "haiti": "HAI"
+    }
+    
+    sorted_bets = sorted(st.session_state.bets.items(), key=lambda x: x[0])
+    
+    for mid, bet in sorted_bets:
+        if mid in global_results:
+            m = next((match for match in st.session_state.matches if match['match_id'] == mid), None)
+            
+            if m:
+                team_a_clean = m['team_a'].lower().strip()
+                team_b_clean = m['team_b'].lower().strip()
+                team_a_code = COUNTRY_CODES.get(team_a_clean, m['team_a'][:3].upper())
+                team_b_code = COUNTRY_CODES.get(team_b_clean, m['team_b'][:3].upper())
+                match_name = f"{team_a_code} vs. {team_b_code}"
+            else:
+                match_name = f"Match #{mid}"
+            
+            current_running_balance -= bet['amount']
+            actual_outcome = global_results[mid].get("outcome")
+            
+            if actual_outcome == bet['choice']:
+                current_running_balance += (bet['amount'] * bet['odds'])
+                
+            balance_history.append(current_running_balance)
+            chart_labels.append(match_name)
+            
+    if len(balance_history) <= 1:
+        st.info("📉 Chart timeline will populate here automatically once your first match prediction is settled by the admin.")
+    else:
+        chart_data = {
+            "Match Milestone": chart_labels,
+            "Account Balance ($)": balance_history
+        }
+        st.line_chart(data=chart_data, x="Match Milestone", y="Account Balance ($)", use_container_width=True)
+        st.caption("Track your upward or downward account value progression after each settled match milestone.")
+
+    # -------------------------------------------------------------------------
+    # REQUEST DEPOSIT AUTHORIZATION
+    # -------------------------------------------------------------------------
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("💳 Request Deposit Authorization")
     deposit_amount = st.number_input("Specify Deposit Volume ($):", min_value=10.0, max_value=500.0, value=500.0, step=50.0)
@@ -411,7 +587,8 @@ elif menu_selection == "💰 Balance":
             if m:
                 status_banner = "🟡 OPEN PROPOSITION"
                 if mid in global_results:
-                    status_banner = "🟢 WON PAYOUT" if bet['choice'] == global_results[mid] else "🔴 LOST SLIP"
+                    actual_outcome = global_results[mid].get("outcome")
+                    status_banner = "🟢 WON PAYOUT" if bet['choice'] == actual_outcome else "🔴 LOST SLIP"
                 
                 with st.expander(f"{status_banner} — {m['team_a']} vs {m['team_b']}"):
                     col_a, col_b = st.columns(2)
@@ -421,14 +598,17 @@ elif menu_selection == "💰 Balance":
                     with col_b:
                         st.write(f"**Odds Multiple:** x{bet['odds']}")
                         if mid in global_results:
-                            st.write(f"**Official Field Result:** {global_results[mid]}")
-                            if bet['choice'] == global_results[mid]:
+                            actual_outcome = global_results[mid].get("outcome")
+                            score_string = global_results[mid].get("score_text", "Settled")
+                            
+                            st.write(f"**Official Field Result:** {actual_outcome} ({score_string})")
+                            if bet['choice'] == actual_outcome:
                                 st.markdown(f"**Net Received Return:** <span style='color:green'>+${bet['amount'] * bet['odds']:.2f}</span>", unsafe_allow_html=True)
                             else:
                                 st.markdown(f"**Net Loss Value:** <span style='color:red'>-${bet['amount']:.2f}</span>", unsafe_allow_html=True)
                         else:
                             st.caption("Waiting for tournament resolution data updates...")
-
+                            
 elif menu_selection == "🏆 Leaderboard":
     st.title("🏆 Profit Standings Leaderboard")
     st.divider()
@@ -439,7 +619,6 @@ elif menu_selection == "🏆 Leaderboard":
     for file_path in user_files:
         try:
             raw_name = os.path.basename(file_path).replace("user_", "").replace(".json", "")
-            # FIXED: Swapped raw file reading out for thread-safe load utility
             data = load_user_data(raw_name)
                 
             display_name = raw_name.upper()
@@ -447,8 +626,10 @@ elif menu_selection == "🏆 Leaderboard":
             
             total_winnings = 0.0
             for mid, bet in bets.items():
-                if mid in global_results and global_results[mid] == bet['choice']:
-                    total_winnings += (bet['amount'] * bet['odds'])
+                if mid in global_results:
+                    actual_outcome = global_results[mid].get("outcome")
+                    if actual_outcome == bet['choice']:
+                        total_winnings += (bet['amount'] * bet['odds'])
                     
             leaderboard_records.append({
                 "Player": display_name,
