@@ -13,6 +13,7 @@ import betting_hub
 import db_manager 
 
 APP_TITLE = "PAYGONE - FIFA WORLD CUP 2026 BETTING SIMULATOR"
+CURRENCY = " N-Dollars"  # 👈 Pure N-Dollars Economy
 RESULTS_FILE = "global_settled_results.json"
 REQUESTS_FILE = "global_balance_requests.json"
 FUN_BETS_FILE = "global_fun_bets.json"
@@ -74,29 +75,6 @@ def save_fun_bets(bets_dict):
     with lock:
         with open(FUN_BETS_FILE, "w") as f: json.dump(bets_dict, f, indent=4)
 
-def load_user_data(username: str):
-    filename = f"user_{username.lower()}.json"
-    lock = FileLock(f"{filename}.lock")
-    with lock:
-        if os.path.exists(filename):
-            try:
-                with open(filename, "r") as f:
-                    data = json.load(f)
-                    data["bets"] = {int(k): v for k, v in data.get("bets", {}).items()}
-                    data["processed_payouts"] = [int(x) for x in data.get("processed_payouts", [])]
-                    if "parlays" not in data: data["parlays"] = []
-                    if "favorite_country" not in data: data["favorite_country"] = ""
-                    if "fun_bets" not in data: data["fun_bets"] = {}
-                    return data
-            except: pass
-        return {"password": "", "balance": 1000.0, "bets": {}, "processed_payouts": [], "parlays": [], "favorite_country": "", "fun_bets": {}}
-
-def save_user_data(username: str, data: dict):
-    filename = f"user_{username.lower()}.json"
-    lock = FileLock(f"{filename}.lock")
-    with lock:
-        with open(filename, "w") as f: json.dump(data, f)
-
 def calculate_odds(team_a, team_b):
     rating_a = FIFA_SCORES.get(team_a, 1500.0)
     rating_b = FIFA_SCORES.get(team_b, 1500.0)
@@ -130,7 +108,7 @@ if "current_user" not in st.session_state:
         else:
             filename = f"user_{username_input.lower()}.json"
             if os.path.exists(filename):
-                user_profile = load_user_data(username_input)
+                user_profile = db_manager.load_user_data(username_input)
                 if user_profile.get("password") == password_input:
                     st.session_state.current_user = username_input
                     st.session_state.balance = user_profile["balance"]
@@ -142,25 +120,24 @@ if "current_user" not in st.session_state:
                 else: st.error("❌ Incorrect profile password!")
             else:
                 new_profile = {"password": password_input, "balance": 1000.0, "bets": {}, "processed_payouts": [], "parlays": [], "favorite_country": "", "fun_bets": {}}
-                save_user_data(username_input, new_profile)
+                db_manager.save_user_data(username_input, new_profile)
                 st.session_state.current_user = username_input
                 st.session_state.balance = new_profile["balance"]
                 st.session_state.bets = new_profile["bets"]
                 st.session_state.processed_payouts = []
                 st.session_state.matches = INITIAL_MATCHES.copy()
                 st.session_state.reset_cycle = 0
-                st.success("🎉 New account registered securely!")
+                st.success(f"🎉 New account registered securely with 1,000.00{CURRENCY}!")
                 st.rerun()
     st.stop()
 
 username_input = st.session_state.current_user
-user_profile = load_user_data(username_input)
+user_profile = db_manager.load_user_data(username_input)
 global_results = load_global_results()
 global_fun_bets = load_fun_bets()
 
 if "parlay_cart" not in st.session_state: st.session_state.parlay_cart = {}
 
-# Payout Calculation Automation Loops
 payout_happened = False
 for match_id, user_bet in list(st.session_state.bets.items()):
     target_key = int(match_id) if int(match_id) in global_results else (str(match_id) if str(match_id) in global_results else None)
@@ -183,7 +160,7 @@ if "parlays" in user_profile:
                 parlay["status"] = "SETTLED"
                 if parlay_won:
                     st.session_state.balance += parlay["potential_payout"]
-                    st.toast(f"🎉 PARLAY WINNER! Received ${parlay['potential_payout']:.2f}!")
+                    st.toast(f"🎉 PARLAY WINNER! Received {parlay['potential_payout']:,.2f}{CURRENCY}!")
                 else: st.toast("❌ Parlay Busted!")
                 payout_happened = True
 
@@ -196,7 +173,7 @@ for prop_id, user_wager in list(user_profile.get("fun_bets", {}).items()):
 
 if payout_happened:
     user_profile.update({"balance": st.session_state.balance, "processed_payouts": st.session_state.processed_payouts})
-    save_user_data(username_input, user_profile)
+    db_manager.save_user_data(username_input, user_profile)
 
 cycle = st.session_state.reset_cycle
 
@@ -217,35 +194,31 @@ with st.sidebar:
         if admin_password == ADMIN_PASSWORD:
             st.caption("🟢 Admin Control Authenticated")
             
-            # 1. Accounts Data View
             user_files = glob.glob("user_*.json")
-            user_credentials = [({"Username": os.path.basename(f).replace("user_", "").replace(".json", "").upper(), "Balance": f"${load_user_data(os.path.basename(f).replace('user_', '').replace('.json', '')).get('balance', 0.0):.2f}"}) for f in user_files]
+            user_credentials = [({"Username": os.path.basename(f).replace("user_", "").replace(".json", "").upper(), f"Balance ({CURRENCY.strip()})": f"{db_manager.load_user_data(os.path.basename(f).replace('user_', '').replace('.json', '')).get('balance', 0.0):,.2f}{CURRENCY}"}) for f in user_files]
             if user_credentials: st.dataframe(user_credentials, use_container_width=True)
             
-            # 2. Deposit Requests Processing Queue
             pending_requests = load_balance_requests()
             for idx, req in enumerate(list(pending_requests)):
-                st.write(f"**Player:** {req['user'].upper()} | **Amount:** ${req['amount']:.2f}")
+                st.write(f"**Player:** {req['user'].upper()} | **Amount:** {req['amount']:,.2f}{CURRENCY}")
                 st.caption(f"Reason: {req.get('reason')}")
                 c_app, c_rej = st.columns(2)
                 if c_app.button("Approve", key=f"app_{idx}"):
-                    t_data = load_user_data(req['user'])
+                    t_data = db_manager.load_user_data(req['user'])
                     t_data["balance"] += req['amount']
-                    save_user_data(req['user'], t_data)
+                    db_manager.save_user_data(req['user'], t_data)
                     if req['user'].lower() == username_input.lower(): st.session_state.balance = t_data["balance"]
                     pending_requests.pop(idx); save_balance_requests(pending_requests); st.rerun()
                 if c_rej.button("Reject", key=f"rej_{idx}"):
                     pending_requests.pop(idx); save_balance_requests(pending_requests); st.rerun()
             
-            # 3. Fast Global Resets
             if st.button("🔴 Reset Loaded Wallet Data", type="primary"):
                 st.session_state.update({"balance": 1000.0, "bets": {}, "processed_payouts": [], "parlay_cart": {}})
                 user_profile.update({"balance": 1000.0, "bets": {}, "processed_payouts": [], "parlays": [], "fun_bets": {}})
-                save_user_data(username_input, user_profile); st.session_state.reset_cycle += 1; st.rerun()
+                db_manager.save_user_data(username_input, user_profile); st.session_state.reset_cycle += 1; st.rerun()
             if st.button("🚨 Wipe All Match Results GLOBALLY"):
                 save_global_results({}); save_fun_bets({}); st.rerun()
             
-            # 4. Admin Scoreboard View Updates
             st.divider()
             from real_results import REAL_WORLD_CUP_DATA, get_match_uid
             rw_phase = st.selectbox("Select Display Phase:", list(REAL_WORLD_CUP_DATA.keys()))
@@ -262,7 +235,6 @@ with st.sidebar:
                 db[real_uid] = {"outcome": "Settled", "score_text": new_real_score.strip(), "status": new_real_status}
                 save_global_results(db); st.rerun()
 
-            # 5. Settle Real Match Bets
             st.divider()
             open_fixtures = [m for m in st.session_state.matches if int(m['match_id']) not in load_global_results()]
             if open_fixtures:
@@ -277,12 +249,10 @@ with st.sidebar:
                     db[int(bm['match_id'])] = {"outcome": outcome_choice, "score_text": f"{f_a} - {f_b}", "status": "Finished"}
                     save_global_results(db); st.rerun()
 
-            # 6. Admin Special Props Builder
             st.divider()
             with st.form("create_prop_form", clear_on_submit=True):
                 prop_desc = st.text_input("Bet Prompt Description:")
                 p_odds = st.number_input("Odds Multiple (x):", min_value=1.1, value=2.5)
-                # Fixed the typo method name here:
                 if st.form_submit_button("Publish Prop Bet Line"):
                     if prop_desc.strip():
                         props = load_fun_bets()
@@ -304,12 +274,11 @@ st.markdown(f"## 🏆 {APP_TITLE}")
 
 if menu_selection == "🕹️ Hub":
     st.title("🕹️ Betting Hub")
-    st.metric(label="Your Current Balance", value=f"${st.session_state.balance:.2f}")
+    st.metric(label="Your Current Balance", value=f"{st.session_state.balance:,.2f}{CURRENCY}")
     st.divider()
 
     parent_tab_matches, parent_tab_others = st.tabs(["⚽ Matches", "🎉 Others"])
 
-    # ⚽ TAB 1: MATCHES 
     with parent_tab_matches:
         betting_hub.render_matches_tab(
             user_profile=user_profile,
@@ -319,7 +288,6 @@ if menu_selection == "🕹️ Hub":
             calculate_odds=calculate_odds
         )
 
-    # 🎉 TAB 2: OTHERS (STAYS IN MAIN FILE SINCE IT IS VERY SHORT)
     with parent_tab_others:
         st.subheader("🎉 Special Custom Friends Bets")
         if not global_fun_bets: st.info("No custom prop bets have been created by the admin yet.")
@@ -333,27 +301,25 @@ if menu_selection == "🕹️ Hub":
                         st.success("✅ WIN!") if user_profile["fun_bets"][p_id]["choice"] == prop["status"] else st.error("❌ LOST!")
                 else:
                     if p_id in user_profile.get("fun_bets", {}):
-                        st.info(f"🔒 Ticket Logged: Staked **${user_profile['fun_bets'][p_id]['amount']}** on `{user_profile['fun_bets'][p_id]['choice']}`")
+                        st.info(f"🔒 Ticket Logged: Staked **{user_profile['fun_bets'][p_id]['amount']:,.2f}{CURRENCY}** on `{user_profile['fun_bets'][p_id]['choice']}`")
                     else:
                         prop_choice = st.radio("Will this happen?", ["HIT", "MISSED"], key=f"choice_{p_id}", horizontal=True)
-                        prop_amount = st.number_input("Wager Amount ($)", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, key=f"amt_{p_id}")
+                        prop_amount = st.number_input(f"Wager Amount ({CURRENCY.strip()})", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, key=f"amt_{p_id}")
                         if st.button("Submit Fun Bet", key=f"submit_{p_id}"):
                             user_profile.setdefault("fun_bets", {})[p_id] = {"choice": prop_choice, "amount": prop_amount, "odds": prop["odds"], "paid": False}
                             st.session_state.balance -= prop_amount; user_profile["balance"] = st.session_state.balance
-                            save_user_data(username_input, user_profile); st.rerun()
+                            db_manager.save_user_data(username_input, user_profile); st.rerun()
                 st.divider()
 
 elif menu_selection == "💰 Balance":
     st.title("💰 Balance & Financial Logs")
     st.divider()
     m_col1, m_col2 = st.columns(2)
-    m_col1.metric("Available Balance", f"${st.session_state.balance:.2f}")
+    m_col1.metric("Available Balance", f"{st.session_state.balance:,.2f}{CURRENCY}")
     
-    # Calculate Total Earnings
     total_payout_earnings = sum((b['amount'] * b['odds']) for mid, b in st.session_state.bets.items() if (int(mid) in global_results and b['choice'] == global_results[int(mid)]['outcome']))
-    m_col2.metric("Total Generated Revenue", f"${total_payout_earnings:.2f}")
+    m_col2.metric("Total Generated Revenue", f"{total_payout_earnings:,.2f}{CURRENCY}")
 
-    # --- 📈 BALANCE TIMELINE CHART ---
     st.subheader("📊 Balance History Timeline")
     balance_history, chart_labels = [1000.0], ["Registration"]
     curr_bal = 1000.0
@@ -366,9 +332,8 @@ elif menu_selection == "💰 Balance":
     if len(balance_history) <= 1: 
         st.info("📉 Timeline will populate once your first prediction is settled.")
     else: 
-        st.line_chart(data={"Match Milestone": chart_labels, "Account Balance ($)": balance_history}, x="Match Milestone", y="Account Balance ($)")
+        st.line_chart(data={"Match Milestone": chart_labels, f"Account Balance ({CURRENCY.strip()})": balance_history}, x="Match Milestone", y=f"Account Balance ({CURRENCY.strip()})")
 
-    # --- 📝 NEW: DETAILED BETTING HISTORY LEDGER ---
     st.divider()
     st.subheader("📋 Your Betting Slips History Ledger")
     
@@ -377,23 +342,20 @@ elif menu_selection == "💰 Balance":
     else:
         history_records = []
         
-        # 1. Gather Single Match Bets
         for mid, bet in st.session_state.bets.items():
-            # Find match metadata
             match_meta = next((m for m in st.session_state.matches if m['match_id'] == int(mid)), None)
             teams_display = f"{match_meta['team_a']} vs {match_meta['team_b']}" if match_meta else f"Match #{mid}"
             stage_display = match_meta['stage'] if match_meta else "Unknown Stage"
             
-            # Resolve settlement status
             if int(mid) in global_results:
                 actual_outcome = global_results[int(mid)]['outcome']
                 score_text = global_results[int(mid)].get('score_text', 'Finished')
                 if bet['choice'] == actual_outcome:
                     status_str = f"✅ WON ({score_text})"
-                    return_val = f"${(bet['amount'] * bet['odds']):.2f}"
+                    return_val = f"{bet['amount'] * bet['odds']:,.2f}{CURRENCY}"
                 else:
                     status_str = f"❌ LOST ({score_text})"
-                    return_val = "$0.00"
+                    return_val = f"0.00{CURRENCY}"
             else:
                 status_str = "⏳ OPEN (Live/Upcoming)"
                 return_val = "Pending"
@@ -402,51 +364,45 @@ elif menu_selection == "💰 Balance":
                 "Type": "🎫 Single",
                 "Stage/Phase": stage_display,
                 "Fixture Selection": teams_display,
-                "Your Prediction Choice": str(bet['choice']),
-                "Odds (x)": f"{bet['odds']}x",
-                "Staked ($)": f"${bet['amount']:.2f}",
-                "Resolution Status": status_str,
-                "Payout Paid ($)": return_val
+                "Prediction": str(bet['choice']),
+                "Odds": f"{bet['odds']}x",
+                f"Staked ({CURRENCY.strip()})": f"{bet['amount']:,.2f}{CURRENCY}",
+                "Status": status_str,
+                f"Payout ({CURRENCY.strip()})": return_val
             })
             
-        # 2. Gather Parlay Accumulator Multi-Bets
-        for p_idx, parlay in enumerate(user_profile.get("parlays", [])):
+        for parlay in user_profile.get("parlays", []):
             legs_desc = " | ".join([f"{leg['teams']} ({leg['choice']})" for leg in parlay["legs"].values()])
             p_status = parlay.get("status", "OPEN")
             
             if p_status == "SETTLED":
-                # Double-check if the parlay was fully won
                 parlay_won = True
                 for m_id, leg in parlay["legs"].items():
                     if int(m_id) in global_results:
-                        if leg["choice"] != global_results[int(m_id)]['outcome']:
-                            parlay_won = False
-                    else:
-                        parlay_won = False
+                        if leg["choice"] != global_results[int(m_id)]['outcome']: parlay_won = False
+                    else: parlay_won = False
                 
                 status_str = "🟢 FULLY SETTLED" if parlay_won else "🔴 BUSTED / LOST"
-                return_val = f"${parlay['potential_payout']:.2f}" if parlay_won else "$0.00"
+                return_val = f"{parlay['potential_payout']:,.2f}{CURRENCY}" if parlay_won else f"0.00{CURRENCY}"
             else:
-                status_str = "🟡 OPEN PARLAY (Pending legs)"
+                status_str = "🟡 OPEN PARLAY"
                 return_val = "Pending"
                 
             history_records.append({
                 "Type": "🔥 Parlay",
                 "Stage/Phase": parlay.get("stage", "Unknown"),
                 "Fixture Selection": f"Combo: {legs_desc}",
-                "Your Prediction Choice": "Multiple (See Combo)",
-                "Odds (x)": f"{parlay['combined_odds']}x",
-                "Staked ($)": f"${parlay['stake']:.2f}",
-                "Resolution Status": status_str,
-                "Payout Paid ($)": return_val
+                "Prediction": "Multi-legs",
+                "Odds": f"{parlay['combined_odds']}x",
+                f"Staked ({CURRENCY.strip()})": f"{parlay['stake']:,.2f}{CURRENCY}",
+                "Status": status_str,
+                f"Payout ({CURRENCY.strip()})": return_val
             })
             
         if history_records:
             import pandas as pd
-            df_history = pd.DataFrame(history_records)
-            st.dataframe(df_history, use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(history_records), use_container_width=True, hide_index=True)
 
-    # --- 🎯 FAVORITE COUNTRY SETUP ---
     st.divider()
     country_options = sorted(list(FIFA_SCORES.keys()))
     current_fav = user_profile.get("favorite_country", "")
@@ -455,9 +411,8 @@ elif menu_selection == "💰 Balance":
     if updated_fav_val != current_fav:
         user_profile["favorite_country"] = updated_fav_val; db_manager.save_user_data(username_input, user_profile); st.rerun()
 
-    # --- 💳 BALANCE DEPOSIT REQUESTS FORM ---
     st.subheader("💳 Request Deposit Authorization")
-    deposit_amount = st.number_input("Specify Volume ($):", min_value=10.0, max_value=500.0, value=500.0)
+    deposit_amount = st.number_input(f"Specify Volume ({CURRENCY.strip()}):", min_value=10.0, max_value=500.0, value=500.0)
     deposit_reason = st.text_area("Reason for request:")
     if st.button("Submit Balance Request", use_container_width=True):
         if not deposit_reason.strip(): st.error("⚠️ Reason required!")
@@ -477,7 +432,6 @@ elif menu_selection == "🏆 Leaderboard":
         r_name = os.path.basename(file_path).replace("user_", "").replace(".json", "")
         u_d = db_manager.load_user_data(r_name)
         
-        # Calculate Total Revenue Generated (Winnings) for this user
         total_payout_earnings = 0.0
         user_bets = u_d.get("bets", {})
         for mid, bet in user_bets.items():
@@ -485,41 +439,30 @@ elif menu_selection == "🏆 Leaderboard":
                 if isinstance(bet, dict) and bet.get('choice') == global_results[int(mid)]['outcome']:
                     total_payout_earnings += (bet.get('amount', 0.0) * bet.get('odds', 1.0))
         
-        # Also include parlay winnings if they exist
         for parlay in u_d.get("parlays", []):
             if parlay.get("status") == "SETTLED":
                 parlay_won = True
                 for m_id, leg in parlay["legs"].items():
                     if int(m_id) in global_results:
-                        if leg["choice"] != global_results[int(m_id)].get("outcome"):
-                            parlay_won = False
-                    else:
-                        parlay_won = False
-                if parlay_won:
-                    total_payout_earnings += parlay.get("potential_payout", 0.0)
+                        if leg["choice"] != global_results[int(m_id)].get("outcome"): parlay_won = False
+                    else: parlay_won = False
+                if parlay_won: total_payout_earnings += parlay.get("potential_payout", 0.0)
 
-        # Append numerical values for sorting, strings for clean display
         leaderboard_records.append({
             "Player": r_name.upper(),
-            "Current Balance ($)": round(u_d.get('balance', 0.0), 2),
-            "Total Winnings ($)": round(total_payout_earnings, 2)
+            "Current Balance": round(u_d.get('balance', 0.0), 2),
+            "Total Winnings": round(total_payout_earnings, 2)
         })
     
     if leaderboard_records:
         import pandas as pd
-        
-        # Convert to DataFrame
         df = pd.DataFrame(leaderboard_records)
-        
-        # Sort by Current Balance in descending order
-        df = df.sort_values(by="Current Balance ($)", ascending=False).reset_index(drop=True)
-        
-        # 🔥 RIGHT HERE: Shift index by 1 so the ranking starts from 1 instead of 0
+        df = df.sort_values(by="Current Balance", ascending=False).reset_index(drop=True)
         df.index = df.index + 1
         
-        # Format columns with dollar signs for clean display layout
-        df["Current Balance ($)"] = df["Current Balance ($)"].map("${:,.2f}".format)
-        df["Total Winnings ($)"] = df["Total Winnings ($)"].map("${:,.2f}".format)
+        df[f"Current Balance ({CURRENCY.strip()})"] = df["Current Balance"].map(lambda x: f"{x:,.2f}{CURRENCY}")
+        df[f"Total Winnings ({CURRENCY.strip()})"] = df["Total Winnings"].map(lambda x: f"{x:,.2f}{CURRENCY}")
+        df = df.drop(columns=["Current Balance", "Total Winnings"], errors="ignore")
         
         st.dataframe(df, use_container_width=True)
     else:
