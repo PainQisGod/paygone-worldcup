@@ -1,3 +1,4 @@
+# real_results.py
 import streamlit as st
 import json
 import os
@@ -7,23 +8,38 @@ from filelock import FileLock
 RESULTS_FILE = "global_settled_results.json"
 
 def get_match_uid(phase, category, team_a, team_b):
-    """
-    Looks up the matching simulation ID from the data structure 
-    to synchronize betting payouts seamlessly.
-    """
-    try:
-        match_list = REAL_WORLD_CUP_DATA[phase][category]
-        for m in match_list:
-            if m["team_a"].strip().lower() == team_a.strip().lower() and m["team_b"].strip().lower() == team_b.strip().lower():
-                return str(m["match_id"])
-    except:
-        pass
-    # Fallback to legacy hash if match_id isn't found
-    import hashlib
+    """Generates a stable, unique string ID for a match based on its names."""
     raw_str = f"{phase}_{category}_{team_a.strip().lower()}_{team_b.strip().lower()}"
     return hashlib.md5(raw_str.encode('utf-8')).hexdigest()
 
-# Add the 'match_id' to your real data dictionary matching matches.py perfectly:
+def load_live_admin_results():
+    """Safely reads global_settled_results.json and extracts score overrides."""
+    lock = FileLock(f"{RESULTS_FILE}.lock")
+    parsed_overrides = {}
+    
+    with lock:
+        if os.path.exists(RESULTS_FILE):
+            try:
+                with open(RESULTS_FILE, "r") as f:
+                    data = json.load(f)
+                    for key, val in data.items():
+                        if isinstance(val, dict):
+                            parsed_overrides[str(key)] = {
+                                "score": val.get("score_text", "Settled"),
+                                "status": val.get("status", "Finished")
+                            }
+                        else:
+                            parsed_overrides[str(key)] = {
+                                "score": str(val),
+                                "status": "Finished"
+                            }
+            except Exception:
+                pass
+    return parsed_overrides
+
+# -------------------------------------------------------------------------
+# NESTED REAL-WORLD WORLD CUP 2026 DATA STRUCTURE (EXPORTED GLOBALLY)
+# -------------------------------------------------------------------------
 REAL_WORLD_CUP_DATA = {
     "Group Stage": {
         "Group A": [
@@ -196,7 +212,6 @@ def render_real_results_page():
                     
                     match_list = REAL_WORLD_CUP_DATA[phase_name][sub_name]
                     for match in match_list:
-                        # Hash lookup key generated here
                         match_uid = get_match_uid(phase_name, sub_name, match['team_a'], match['team_b'])
                         
                         display_score = match['score']
