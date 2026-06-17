@@ -353,7 +353,7 @@ elif menu_selection == "💰 Balance":
     total_payout_earnings = sum((b['amount'] * b['odds']) for mid, b in st.session_state.bets.items() if (int(mid) in global_results and b['choice'] == global_results[int(mid)]['outcome']))
     m_col2.metric("Total Generated Revenue", f"${total_payout_earnings:.2f}")
 
-    # History Line Chart Display Logic
+    # --- 📈 BALANCE TIMELINE CHART ---
     st.subheader("📊 Balance History Timeline")
     balance_history, chart_labels = [1000.0], ["Registration"]
     curr_bal = 1000.0
@@ -363,19 +363,99 @@ elif menu_selection == "💰 Balance":
                 curr_bal -= bet['amount']
                 if global_results[int(mid)]['outcome'] == bet['choice']: curr_bal += (bet['amount'] * bet['odds'])
                 balance_history.append(curr_bal); chart_labels.append(f"Match #{mid}")
-    if len(balance_history) <= 1: st.info("📉 Timeline will populate once first prediction is settled.")
-    else: st.line_chart(data={"Match Milestone": chart_labels, "Account Balance ($)": balance_history}, x="Match Milestone", y="Account Balance ($)")
+    if len(balance_history) <= 1: 
+        st.info("📉 Timeline will populate once your first prediction is settled.")
+    else: 
+        st.line_chart(data={"Match Milestone": chart_labels, "Account Balance ($)": balance_history}, x="Match Milestone", y="Account Balance ($)")
 
-    # Favorite Country Setup Tracker Dropdown
+    # --- 📝 NEW: DETAILED BETTING HISTORY LEDGER ---
+    st.divider()
+    st.subheader("📋 Your Betting Slips History Ledger")
+    
+    if not st.session_state.bets and not user_profile.get("parlays", []):
+        st.info("You haven't placed any bets yet! Go to the 🕹️ Hub to place your first stake.")
+    else:
+        history_records = []
+        
+        # 1. Gather Single Match Bets
+        for mid, bet in st.session_state.bets.items():
+            # Find match metadata
+            match_meta = next((m for m in st.session_state.matches if m['match_id'] == int(mid)), None)
+            teams_display = f"{match_meta['team_a']} vs {match_meta['team_b']}" if match_meta else f"Match #{mid}"
+            stage_display = match_meta['stage'] if match_meta else "Unknown Stage"
+            
+            # Resolve settlement status
+            if int(mid) in global_results:
+                actual_outcome = global_results[int(mid)]['outcome']
+                score_text = global_results[int(mid)].get('score_text', 'Finished')
+                if bet['choice'] == actual_outcome:
+                    status_str = f"✅ WON ({score_text})"
+                    return_val = f"${(bet['amount'] * bet['odds']):.2f}"
+                else:
+                    status_str = f"❌ LOST ({score_text})"
+                    return_val = "$0.00"
+            else:
+                status_str = "⏳ OPEN (Live/Upcoming)"
+                return_val = "Pending"
+                
+            history_records.append({
+                "Type": "🎫 Single",
+                "Stage/Phase": stage_display,
+                "Fixture Selection": teams_display,
+                "Your Prediction Choice": str(bet['choice']),
+                "Odds (x)": f"{bet['odds']}x",
+                "Staked ($)": f"${bet['amount']:.2f}",
+                "Resolution Status": status_str,
+                "Payout Paid ($)": return_val
+            })
+            
+        # 2. Gather Parlay Accumulator Multi-Bets
+        for p_idx, parlay in enumerate(user_profile.get("parlays", [])):
+            legs_desc = " | ".join([f"{leg['teams']} ({leg['choice']})" for leg in parlay["legs"].values()])
+            p_status = parlay.get("status", "OPEN")
+            
+            if p_status == "SETTLED":
+                # Double-check if the parlay was fully won
+                parlay_won = True
+                for m_id, leg in parlay["legs"].items():
+                    if int(m_id) in global_results:
+                        if leg["choice"] != global_results[int(m_id)]['outcome']:
+                            parlay_won = False
+                    else:
+                        parlay_won = False
+                
+                status_str = "🟢 FULLY SETTLED" if parlay_won else "🔴 BUSTED / LOST"
+                return_val = f"${parlay['potential_payout']:.2f}" if parlay_won else "$0.00"
+            else:
+                status_str = "🟡 OPEN PARLAY (Pending legs)"
+                return_val = "Pending"
+                
+            history_records.append({
+                "Type": "🔥 Parlay",
+                "Stage/Phase": parlay.get("stage", "Unknown"),
+                "Fixture Selection": f"Combo: {legs_desc}",
+                "Your Prediction Choice": "Multiple (See Combo)",
+                "Odds (x)": f"{parlay['combined_odds']}x",
+                "Staked ($)": f"${parlay['stake']:.2f}",
+                "Resolution Status": status_str,
+                "Payout Paid ($)": return_val
+            })
+            
+        if history_records:
+            import pandas as pd
+            df_history = pd.DataFrame(history_records)
+            st.dataframe(df_history, use_container_width=True, hide_index=True)
+
+    # --- 🎯 FAVORITE COUNTRY SETUP ---
     st.divider()
     country_options = sorted(list(FIFA_SCORES.keys()))
     current_fav = user_profile.get("favorite_country", "")
     selected_fav = st.selectbox("Choose your favorite nation to track:", options=["None"] + country_options, index=0 if current_fav == "" else country_options.index(current_fav) + 1)
     updated_fav_val = "" if selected_fav == "None" else selected_fav
     if updated_fav_val != current_fav:
-        user_profile["favorite_country"] = updated_fav_val; save_user_data(username_input, user_profile); st.rerun()
+        user_profile["favorite_country"] = updated_fav_val; db_manager.save_user_data(username_input, user_profile); st.rerun()
 
-    # Balance Deposit Request Forms Queue
+    # --- 💳 BALANCE DEPOSIT REQUESTS FORM ---
     st.subheader("💳 Request Deposit Authorization")
     deposit_amount = st.number_input("Specify Volume ($):", min_value=10.0, max_value=500.0, value=500.0)
     deposit_reason = st.text_area("Reason for request:")
@@ -387,13 +467,60 @@ elif menu_selection == "💰 Balance":
 
 elif menu_selection == "🏆 Leaderboard":
     st.title("🏆 Standing Leaderboard")
+    st.write("See who's dominating the simulation based on current cash flow and overall revenue generation.")
+    st.divider()
+    
     user_files = glob.glob("user_*.json")
     leaderboard_records = []
+    
     for file_path in user_files:
         r_name = os.path.basename(file_path).replace("user_", "").replace(".json", "")
-        u_d = load_user_data(r_name)
-        leaderboard_records.append({"Player": r_name.upper(), "Current Balance": f"${u_d.get('balance', 0.0):.2f}"})
-    st.dataframe(leaderboard_records, use_container_width=True)
+        u_d = db_manager.load_user_data(r_name)
+        
+        # Calculate Total Revenue Generated (Winnings) for this user
+        total_payout_earnings = 0.0
+        user_bets = u_d.get("bets", {})
+        for mid, bet in user_bets.items():
+            if int(mid) in global_results:
+                if isinstance(bet, dict) and bet.get('choice') == global_results[int(mid)]['outcome']:
+                    total_payout_earnings += (bet.get('amount', 0.0) * bet.get('odds', 1.0))
+        
+        # Also include parlay winnings if they exist
+        for parlay in u_d.get("parlays", []):
+            if parlay.get("status") == "SETTLED":
+                parlay_won = True
+                for m_id, leg in parlay["legs"].items():
+                    if int(m_id) in global_results:
+                        if leg["choice"] != global_results[int(m_id)].get("outcome"):
+                            parlay_won = False
+                    else:
+                        parlay_won = False
+                if parlay_won:
+                    total_payout_earnings += parlay.get("potential_payout", 0.0)
+
+        # Append numerical values for sorting, strings for clean display
+        leaderboard_records.append({
+            "Player": r_name.upper(),
+            "Current Balance ($)": round(u_d.get('balance', 0.0), 2),
+            "Total Winnings ($)": round(total_payout_earnings, 2)
+        })
+    
+    if leaderboard_records:
+        import pandas as pd
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(leaderboard_records)
+        
+        # 🔥 Sort by Current Balance in descending order
+        df = df.sort_values(by="Current Balance ($)", ascending=False).reset_index(drop=True)
+        
+        # Format columns with dollar signs for clean display layout
+        df["Current Balance ($)"] = df["Current Balance ($)"].map("${:,.2f}".format)
+        df["Total Winnings ($)"] = df["Total Winnings ($)"].map("${:,.2f}".format)
+        
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("No player records found.")
 
 elif menu_selection == "⚽ Real Results":
     render_real_results_page()
