@@ -9,7 +9,6 @@ from filelock import FileLock
 # CONSTANTS & MODULAR DATA IMPORT
 # -------------------------------------------------------------------------
 from matches import FIFA_SCORES, INITIAL_MATCHES
-from real_results import render_real_results_page, REAL_WORLD_CUP_DATA, get_match_uid
 
 APP_TITLE = "PAYGONE - FIFA WORLD CUP 2026 BETTING SIMULATOR"
 RESULTS_FILE = "global_settled_results.json"
@@ -315,6 +314,7 @@ with st.sidebar:
             # -------------------------------------------------------------
             # MODULE A: 🌐 REAL WORLD CUP SCORE & STATUS DISPLAY UPDATER
             # -------------------------------------------------------------
+            from real_results import REAL_WORLD_CUP_DATA, get_match_uid
             st.divider()
             st.markdown("#### 🌐 1. Update Real Match Display (Sidebar/Tab)")
             st.caption("Changes what users see on the live scoreboards. Does NOT affect betting wallets.")
