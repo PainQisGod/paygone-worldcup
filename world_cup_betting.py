@@ -6,19 +6,20 @@ import glob
 import datetime
 from filelock import FileLock
 
-# -------------------------------------------------------------------------
-# CONSTANTS & MODULAR DATA IMPORT
-# -------------------------------------------------------------------------
+# --- IMPORT EXTERNAL PAGES & DATA ---
 from matches import FIFA_SCORES, INITIAL_MATCHES
 from real_results import render_real_results_page
+import betting_hub
+import db_manager 
 
 APP_TITLE = "PAYGONE - FIFA WORLD CUP 2026 BETTING SIMULATOR"
 RESULTS_FILE = "global_settled_results.json"
 REQUESTS_FILE = "global_balance_requests.json"
+FUN_BETS_FILE = "global_fun_bets.json"
 ADMIN_PASSWORD = "master"
 
 # -------------------------------------------------------------------------
-# CONCURRENCY-SAFE READ/WRITE UTILITIES (UPDATED PARSING FIX)
+# DATABASE UTILITIES
 # -------------------------------------------------------------------------
 def load_global_results():
     lock = FileLock(f"{RESULTS_FILE}.lock")
@@ -29,48 +30,49 @@ def load_global_results():
                     data = json.load(f)
                     parsed = {}
                     for k, v in data.items():
-                        # Handle numerical match IDs and string MD5 keys cleanly
-                        try:
-                            key_converted = int(k)
-                        except ValueError:
-                            key_converted = str(k)
-                            
-                        if isinstance(v, dict):
-                            parsed[key_converted] = v
-                        else:
-                            parsed[key_converted] = {"outcome": v, "score_text": "Settled"}
+                        try: key_converted = int(k)
+                        except ValueError: key_converted = str(k)
+                        if isinstance(v, dict): parsed[key_converted] = v
+                        else: parsed[key_converted] = {"outcome": v, "score_text": "Settled"}
                     return parsed
-            except:
-                return {}
+            except: return {}
         return {}
 
 def save_global_results(results_dict):
     lock = FileLock(f"{RESULTS_FILE}.lock")
     with lock:
-        # Stringify keys before dumped into JSON file
         stringified_data = {str(k): v for k, v in results_dict.items()}
         try:
-            with open(RESULTS_FILE, "w") as f:
-                json.dump(stringified_data, f, indent=4)
-        except:
-            pass
+            with open(RESULTS_FILE, "w") as f: json.dump(stringified_data, f, indent=4)
+        except: pass
 
 def load_balance_requests():
     lock = FileLock(f"{REQUESTS_FILE}.lock")
     with lock:
         if os.path.exists(REQUESTS_FILE):
             try:
-                with open(REQUESTS_FILE, "r") as f:
-                    return json.load(f)
-            except:
-                return []
+                with open(REQUESTS_FILE, "r") as f: return json.load(f)
+            except: return []
         return []
 
 def save_balance_requests(requests_list):
     lock = FileLock(f"{REQUESTS_FILE}.lock")
     with lock:
-        with open(REQUESTS_FILE, "w") as f:
-            json.dump(requests_list, f)
+        with open(REQUESTS_FILE, "w") as f: json.dump(requests_list, f)
+
+def load_fun_bets():
+    lock = FileLock(f"{FUN_BETS_FILE}.lock")
+    with lock:
+        if os.path.exists(FUN_BETS_FILE):
+            try:
+                with open(FUN_BETS_FILE, "r") as f: return json.load(f)
+            except: return {}
+        return {}
+
+def save_fun_bets(bets_dict):
+    lock = FileLock(f"{FUN_BETS_FILE}.lock")
+    with lock:
+        with open(FUN_BETS_FILE, "w") as f: json.dump(bets_dict, f, indent=4)
 
 def load_user_data(username: str):
     filename = f"user_{username.lower()}.json"
@@ -82,17 +84,18 @@ def load_user_data(username: str):
                     data = json.load(f)
                     data["bets"] = {int(k): v for k, v in data.get("bets", {}).items()}
                     data["processed_payouts"] = [int(x) for x in data.get("processed_payouts", [])]
+                    if "parlays" not in data: data["parlays"] = []
+                    if "favorite_country" not in data: data["favorite_country"] = ""
+                    if "fun_bets" not in data: data["fun_bets"] = {}
                     return data
-            except:
-                pass
-        return {"password": "", "balance": 1000.0, "bets": {}, "processed_payouts": []}
+            except: pass
+        return {"password": "", "balance": 1000.0, "bets": {}, "processed_payouts": [], "parlays": [], "favorite_country": "", "fun_bets": {}}
 
 def save_user_data(username: str, data: dict):
     filename = f"user_{username.lower()}.json"
     lock = FileLock(f"{filename}.lock")
     with lock:
-        with open(filename, "w") as f:
-            json.dump(data, f)
+        with open(filename, "w") as f: json.dump(data, f)
 
 def calculate_odds(team_a, team_b):
     rating_a = FIFA_SCORES.get(team_a, 1500.0)
@@ -100,10 +103,7 @@ def calculate_odds(team_a, team_b):
     total_rating = rating_a + rating_b
     prob_a = rating_a / total_rating
     prob_b = rating_b / total_rating
-    win_prob_a = prob_a * 0.8
-    win_prob_b = prob_b * 0.8
-    draw_prob = 0.20
-    return round(1 / win_prob_a, 2), round(1 / draw_prob, 2), round(1 / win_prob_b, 2)
+    return round(1 / (prob_a * 0.8), 2), round(1 / 0.20, 2), round(1 / (prob_b * 0.8), 2)
             
 # -------------------------------------------------------------------------
 # SECURED LOGIN SYSTEM
@@ -111,15 +111,12 @@ def calculate_odds(team_a, team_b):
 if "current_user" not in st.session_state:
     st.title(f"🏆 {APP_TITLE}")
     st.subheader("Please sign in to access your dashboard")
-    
     username_input = st.text_input("Enter Username:", value="").strip()
     password_input = st.text_input("Enter Password:", type="password", value="").strip()
     
     if st.button("Enter", use_container_width=True):
-        if username_input == "":
-            st.error("⚠️ Username field cannot be empty!")
-        elif password_input == "":
-            st.error("⚠️ Password field cannot be empty!")
+        if username_input == "": st.error("⚠️ Username field cannot be empty!")
+        elif password_input == "": st.error("⚠️ Password field cannot be empty!")
         elif username_input.lower() == "admin":
             if password_input == ADMIN_PASSWORD:
                 st.session_state.current_user = "Admin"
@@ -129,8 +126,7 @@ if "current_user" not in st.session_state:
                 st.session_state.matches = INITIAL_MATCHES.copy()
                 st.session_state.reset_cycle = 0
                 st.rerun()
-            else:
-                st.error("❌ Incorrect profile password!")
+            else: st.error("❌ Incorrect profile password!")
         else:
             filename = f"user_{username_input.lower()}.json"
             if os.path.exists(filename):
@@ -143,17 +139,10 @@ if "current_user" not in st.session_state:
                     st.session_state.matches = INITIAL_MATCHES.copy()
                     st.session_state.reset_cycle = 0
                     st.rerun()
-                else:
-                    st.error("❌ Incorrect profile password!")
+                else: st.error("❌ Incorrect profile password!")
             else:
-                new_profile = {
-                    "password": password_input,
-                    "balance": 1000.0,
-                    "bets": {},
-                    "processed_payouts": []
-                }
+                new_profile = {"password": password_input, "balance": 1000.0, "bets": {}, "processed_payouts": [], "parlays": [], "favorite_country": "", "fun_bets": {}}
                 save_user_data(username_input, new_profile)
-                
                 st.session_state.current_user = username_input
                 st.session_state.balance = new_profile["balance"]
                 st.session_state.bets = new_profile["bets"]
@@ -167,468 +156,247 @@ if "current_user" not in st.session_state:
 username_input = st.session_state.current_user
 user_profile = load_user_data(username_input)
 global_results = load_global_results()
-payout_happened = False
+global_fun_bets = load_fun_bets()
 
+if "parlay_cart" not in st.session_state: st.session_state.parlay_cart = {}
+
+# Payout Calculation Automation Loops
+payout_happened = False
 for match_id, user_bet in list(st.session_state.bets.items()):
-    if match_id in global_results and match_id not in st.session_state.processed_payouts:
-        actual_winner = global_results[match_id].get("outcome")
-        if user_bet['choice'] == actual_winner:
-            st.session_state.balance += (user_bet['amount'] * user_bet['odds'])
-        st.session_state.processed_payouts.append(match_id)
+    target_key = int(match_id) if int(match_id) in global_results else (str(match_id) if str(match_id) in global_results else None)
+    if target_key is not None and int(match_id) not in st.session_state.processed_payouts:
+        if isinstance(user_bet, dict) and user_bet.get('choice') == global_results[target_key].get("outcome"):
+            st.session_state.balance += (user_bet.get('amount', 0.0) * user_bet.get('odds', 1.0))
+        st.session_state.processed_payouts.append(int(match_id))
+        payout_happened = True
+
+if "parlays" in user_profile:
+    for parlay in user_profile["parlays"]:
+        if parlay.get("status") == "OPEN":
+            all_settled, parlay_won = True, True
+            for m_id, leg in parlay["legs"].items():
+                t_leg_key = int(m_id) if int(m_id) in global_results else (str(m_id) if str(m_id) in global_results else None)
+                if t_leg_key is not None:
+                    if leg["choice"] != global_results[t_leg_key].get("outcome"): parlay_won = False
+                else: all_settled = False
+            if all_settled:
+                parlay["status"] = "SETTLED"
+                if parlay_won:
+                    st.session_state.balance += parlay["potential_payout"]
+                    st.toast(f"🎉 PARLAY WINNER! Received ${parlay['potential_payout']:.2f}!")
+                else: st.toast("❌ Parlay Busted!")
+                payout_happened = True
+
+for prop_id, user_wager in list(user_profile.get("fun_bets", {}).items()):
+    if prop_id in global_fun_bets and global_fun_bets[prop_id]["status"] != "OPEN" and not user_wager.get("paid", False):
+        if user_wager["choice"] == global_fun_bets[prop_id]["status"]:
+            st.session_state.balance += (user_wager["amount"] * user_wager["odds"])
+        user_wager["paid"] = True
         payout_happened = True
 
 if payout_happened:
-    user_profile["balance"] = st.session_state.balance
-    user_profile["processed_payouts"] = st.session_state.processed_payouts
+    user_profile.update({"balance": st.session_state.balance, "processed_payouts": st.session_state.processed_payouts})
     save_user_data(username_input, user_profile)
 
 cycle = st.session_state.reset_cycle
 
 # -------------------------------------------------------------------------
-# SIDEBAR NAVIGATION CONTROLS & LOGOUT
+# SIDEBAR NAVIGATION & ADMIN CONTROLS
 # -------------------------------------------------------------------------
-st.markdown(
-    """
-    <style>
-        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { font-size: 22px !important; font-weight: bold !important; color: #ffffff !important; }
-        [data-testid="stSidebar"] label[data-testid="stRadioOption"] p { font-size: 20px !important; font-weight: 500 !important; }
-        [data-testid="stSidebar"] gap { gap: 15px !important; }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 with st.sidebar:
     st.write(f"Active Profile: **{username_input.upper()}**")
     menu_selection = st.radio("Navigate System:", ["🕹️ Hub", "💰 Balance", "🏆 Leaderboard", "⚽ Real Results"], index=0)
     
     if st.button("🚪 Logout / Switch Account", use_container_width=True):
+        if "parlay_cart" in st.session_state: st.session_state.parlay_cart = {}
         del st.session_state.current_user
         st.rerun()
         
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
-    
     with st.expander("🛠️ Admin Panel"):
         admin_password = st.text_input("Access Token Key", type="password")
         if admin_password == ADMIN_PASSWORD:
             st.caption("🟢 Admin Control Authenticated")
             
-            st.divider()
-            st.markdown("#### 🔑 Global Accounts Overview")
-            
+            # 1. Accounts Data View
             user_files = glob.glob("user_*.json")
-            user_credentials = []
-            user_list_clean = []
+            user_credentials = [({"Username": os.path.basename(f).replace("user_", "").replace(".json", "").upper(), "Balance": f"${load_user_data(os.path.basename(f).replace('user_', '').replace('.json', '')).get('balance', 0.0):.2f}"}) for f in user_files]
+            if user_credentials: st.dataframe(user_credentials, use_container_width=True)
             
-            for file_path in user_files:
-                try:
-                    raw_name = os.path.basename(file_path).replace("user_", "").replace(".json", "")
-                    u_data = load_user_data(raw_name)
-                    display_name = raw_name.upper()
-                    user_list_clean.append(raw_name)
-                    
-                    user_credentials.append({
-                        "Username": display_name,
-                        "Balance": f"${u_data.get('balance', 0.0):.2f}"
-                    })
-                except:
-                    pass
-            
-            if not user_credentials:
-                st.info("No user profiles detected.")
-            else:
-                st.dataframe(user_credentials, use_container_width=True)
-            
-            st.divider()
-            st.markdown("#### 🔄 Administrative Password Override")
-            if not user_list_clean:
-                st.info("No player accounts available to reset.")
-            else:
-                target_reset_user = st.selectbox("Select Profile to Modify:", options=user_list_clean, format_func=lambda x: x.upper())
-                new_forced_password = st.text_input("Assign New Password:", type="password", key="force_pw_input").strip()
-                
-                if st.button("Force Update Password", use_container_width=True):
-                    if new_forced_password == "":
-                        st.error("⚠️ New password string cannot be empty!")
-                    else:
-                        account_data = load_user_data(target_reset_user)
-                        account_data["password"] = new_forced_password
-                        save_user_data(target_reset_user, account_data)
-                        st.success(f"🔒 Password for account **{target_reset_user.upper()}** changed successfully!")
-            
-            st.divider()
-            st.markdown("#### 📥 Balance Request Queue")
+            # 2. Deposit Requests Processing Queue
             pending_requests = load_balance_requests()
-            if not pending_requests:
-                st.info("No balance reloads awaiting validation.")
-            else:
-                for idx, req in enumerate(pending_requests):
-                    st.write(f"**Player:** {req['user'].upper()} | **Amount:** ${req['amount']:.2f}")
-                    st.info(f"💬 **Reason given:** *\"{req.get('reason', 'No reason specified')}\"*")
-                    
-                    col_app, col_rej = st.columns(2)
-                    if col_app.button("Approve", key=f"app_{idx}"):
-                        target_user = req['user']
-                        t_data = load_user_data(target_user)
-                        t_data["balance"] += req['amount']
-                        save_user_data(target_user, t_data)
-                        if target_user.lower() == username_input.lower():
-                            st.session_state.balance = t_data["balance"]
-                        pending_requests.pop(idx)
-                        save_balance_requests(pending_requests)
-                        st.rerun()
-                    if col_rej.button("Reject", key=f"rej_{idx}"):
-                        pending_requests.pop(idx)
-                        save_balance_requests(pending_requests)
-                        st.rerun()
-            st.divider()
+            for idx, req in enumerate(list(pending_requests)):
+                st.write(f"**Player:** {req['user'].upper()} | **Amount:** ${req['amount']:.2f}")
+                st.caption(f"Reason: {req.get('reason')}")
+                c_app, c_rej = st.columns(2)
+                if c_app.button("Approve", key=f"app_{idx}"):
+                    t_data = load_user_data(req['user'])
+                    t_data["balance"] += req['amount']
+                    save_user_data(req['user'], t_data)
+                    if req['user'].lower() == username_input.lower(): st.session_state.balance = t_data["balance"]
+                    pending_requests.pop(idx); save_balance_requests(pending_requests); st.rerun()
+                if c_rej.button("Reject", key=f"rej_{idx}"):
+                    pending_requests.pop(idx); save_balance_requests(pending_requests); st.rerun()
             
+            # 3. Fast Global Resets
             if st.button("🔴 Reset Loaded Wallet Data", type="primary"):
-                st.session_state.balance = 1000.0
-                st.session_state.bets = {}
-                st.session_state.processed_payouts = []
-                user_profile["balance"] = 1000.0
-                user_profile["bets"] = {}
-                user_profile["processed_payouts"] = []
-                save_user_data(username_input, user_profile)
-                st.session_state.reset_cycle += 1
-                st.rerun()
+                st.session_state.update({"balance": 1000.0, "bets": {}, "processed_payouts": [], "parlay_cart": {}})
+                user_profile.update({"balance": 1000.0, "bets": {}, "processed_payouts": [], "parlays": [], "fun_bets": {}})
+                save_user_data(username_input, user_profile); st.session_state.reset_cycle += 1; st.rerun()
             if st.button("🚨 Wipe All Match Results GLOBALLY"):
-                save_global_results({})
-                st.rerun()
+                save_global_results({}); save_fun_bets({}); st.rerun()
             
-            # -------------------------------------------------------------
-            # INTEGRATED PANEL MODULAR DIVISION
-            # -------------------------------------------------------------
+            # 4. Admin Scoreboard View Updates
             st.divider()
-            st.markdown("#### 🌐 1. Update Real Match Score Display")
-            st.caption("Alters public display strings inside the Scoreboard page. Does NOT alter user wallets.")
-            
             from real_results import REAL_WORLD_CUP_DATA, get_match_uid
-            
-            rw_phase = st.selectbox("Select Display Phase:", list(REAL_WORLD_CUP_DATA.keys()), key=f"disp_phase_c{cycle}")
-            rw_categories = list(REAL_WORLD_CUP_DATA[rw_phase].keys())
-            rw_cat = st.selectbox("Select Display Category:", rw_categories, key=f"disp_cat_c{cycle}")
-            
+            rw_phase = st.selectbox("Select Display Phase:", list(REAL_WORLD_CUP_DATA.keys()))
+            rw_cat = st.selectbox("Select Display Category:", list(REAL_WORLD_CUP_DATA[rw_phase].keys()))
             rw_matches = REAL_WORLD_CUP_DATA[rw_phase][rw_cat]
-            rw_labels = [f"{m['team_a']} vs {m['team_b']} ({m['date']})" for m in rw_matches]
-            rw_idx = st.selectbox("Choose Display Fixture:", range(len(rw_labels)), format_func=lambda x: rw_labels[x], key=f"disp_idx_c{cycle}")
-            
+            rw_idx = st.selectbox("Choose Display Fixture:", range(len(rw_matches)), format_func=lambda x: f"{rw_matches[x]['team_a']} vs {rw_matches[x]['team_b']}")
             target_rw_match = rw_matches[rw_idx]
             real_uid = str(get_match_uid(rw_phase, rw_cat, target_rw_match['team_a'], target_rw_match['team_b']))
             
-            existing_override = load_global_results().get(real_uid, {})
-            
-            col_rw1, col_rw2 = st.columns(2)
-            with col_rw1:
-                default_score_val = existing_override.get("score_text", target_rw_match['score'])
-                new_real_score = st.text_input("Scoreline (e.g., '2 - 1'):", value=default_score_val, key=f"rw_disp_score_{real_uid}")
-            with col_rw2:
-                status_options = ["Scheduled", "Live", "Finished"]
-                default_status_idx = status_options.index(existing_override.get("status", target_rw_match['status'])) if existing_override.get("status") in status_options else 0
-                new_real_status = st.selectbox("Display Status:", status_options, index=default_status_idx, key=f"rw_disp_status_{real_uid}")
-                
-            if st.button("Publish Scoreboard Update", key=f"rw_disp_btn_{real_uid}", use_container_width=True):
-                db_state = load_global_results()
-                db_state[real_uid] = {
-                    "outcome": "Settled",
-                    "score_text": new_real_score.strip(),
-                    "status": new_real_status
-                }
-                save_global_results(db_state)
-                st.success("Scoreboard updated successfully without breaking bets!")
-                st.rerun()
+            new_real_score = st.text_input("Scoreline:", value=target_rw_match['score'], key=f"rw_scr_{real_uid}")
+            new_real_status = st.selectbox("Display Status:", ["Scheduled", "Live", "Finished"], key=f"rw_st_{real_uid}")
+            if st.button("Publish Scoreboard Update", key=f"rw_btn_{real_uid}", use_container_width=True):
+                db = load_global_results()
+                db[real_uid] = {"outcome": "Settled", "score_text": new_real_score.strip(), "status": new_real_status}
+                save_global_results(db); st.rerun()
 
+            # 5. Settle Real Match Bets
             st.divider()
-            st.markdown("#### 💰 2. Force Settle Active User Bets")
-            st.caption("Processes user wagers using numerical Match IDs to issue balance payouts.")
-            
-            current_db_check = load_global_results()
-            open_fixtures = [m for m in st.session_state.matches if int(m['match_id']) not in current_db_check]
-            
-            if not open_fixtures:
-                st.info("All user bet slips have been entirely resolved!")
-            else:
-                bet_match_options = {f"Match #{m['match_id']}: {m['team_a']} vs {m['team_b']}": m for m in open_fixtures}
-                selected_bet_str = st.selectbox("Select Bet Target to Settle & Close Wagers:", list(bet_match_options.keys()), key=f"settle_bet_select_c{cycle}")
-                
-                if selected_bet_str:
-                    bm = bet_match_options[selected_bet_str]
-                    bet_match_id = int(bm['match_id'])
-                    bt_a = bm['team_a']
-                    bt_b = bm['team_b']
-                    
-                    st.markdown(f"Choose the **Official Result** to trigger user payouts:")
-                    outcome_choice = st.radio("Winning Outcome:", [bt_a, "Draw", bt_b], key=f"outcome_choice_{bet_match_id}_c{cycle}", horizontal=True)
-                    
-                    col_bs1, col_bs2 = st.columns(2)
-                    with col_bs1:
-                        final_goals_a = st.number_input(f"{bt_a} Final Goals", min_value=0, max_value=25, value=0, key=f"f_goals_a_{bet_match_id}")
-                    with col_bs2:
-                        final_goals_b = st.number_input(f"{bt_b} Final Goals", min_value=0, max_value=25, value=0, key=f"f_goals_b_{bet_match_id}")
-                    
-                    if st.button("Finalize Payouts & Close Wagers", key=f"payout_btn_{bet_match_id}", use_container_width=True, type="primary"):
-                        db_state = load_global_results()
-                        db_state[bet_match_id] = {
-                            "outcome": outcome_choice,
-                            "score_text": f"{final_goals_a} - {final_goals_b}",
-                            "status": "Finished"
-                        }
-                        save_global_results(db_state)
-                        st.success(f"Processed wallet transactions for Match #{bet_match_id}!")
-                        st.rerun()
+            open_fixtures = [m for m in st.session_state.matches if int(m['match_id']) not in load_global_results()]
+            if open_fixtures:
+                b_options = {f"Match #{m['match_id']}: {m['team_a']} vs {m['team_b']}": m for m in open_fixtures}
+                sel_str = st.selectbox("Select Bet Target to Settle:", list(b_options.keys()))
+                bm = b_options[sel_str]
+                outcome_choice = st.radio("Winning Outcome:", [bm['team_a'], "Draw", bm['team_b']], horizontal=True)
+                f_a = st.number_input(f"{bm['team_a']} Goals", min_value=0, value=0)
+                f_b = st.number_input(f"{bm['team_b']} Goals", min_value=0, value=0)
+                if st.button("Finalize Payouts & Close Wagers", key=f"pay_b_{bm['match_id']}", use_container_width=True, type="primary"):
+                    db = load_global_results()
+                    db[int(bm['match_id'])] = {"outcome": outcome_choice, "score_text": f"{f_a} - {f_b}", "status": "Finished"}
+                    save_global_results(db); st.rerun()
+
+            # 6. Admin Special Props Builder
+            st.divider()
+            with st.form("create_prop_form", clear_on_submit=True):
+                prop_desc = st.text_input("Bet Prompt Description:")
+                p_odds = st.number_input("Odds Multiple (x):", min_value=1.1, value=2.5)
+                # Fixed the typo method name here:
+                if st.form_submit_button("Publish Prop Bet Line"):
+                    if prop_desc.strip():
+                        props = load_fun_bets()
+                        props[f"prop_{int(datetime.datetime.now().timestamp())}"] = {"description": prop_desc.strip(), "odds": round(p_odds, 2), "status": "OPEN"}
+                        save_fun_bets(props); st.rerun()
+
+            open_props_admin = {k: v for k, v in global_fun_bets.items() if v["status"] == "OPEN"}
+            if open_props_admin:
+                target_prop_id = st.selectbox("Select prop to resolve:", list(open_props_admin.keys()), format_func=lambda x: open_props_admin[x]["description"])
+                settle_outcome = st.radio("Official Outcome:", ["HIT", "MISSED"], horizontal=True)
+                if st.button("Finalize Prop Bet Payouts", use_container_width=True):
+                    global_fun_bets[target_prop_id]["status"] = settle_outcome
+                    save_fun_bets(global_fun_bets); st.rerun()
 
 # -------------------------------------------------------------------------
-# MAIN LAYOUT CONTAINER
+# INTERFACE CONTENT ROUTER
 # -------------------------------------------------------------------------
 st.markdown(f"## 🏆 {APP_TITLE}")
 
 if menu_selection == "🕹️ Hub":
     st.title("🕹️ Betting Hub")
     st.metric(label="Your Current Balance", value=f"${st.session_state.balance:.2f}")
-    st.caption("Select a tournament tier tab below to browse match listings. Minimum bet requirement: **$100.00**.")
     st.divider()
 
-    subtab_list = ["Matchday 1", "Matchday 2", "Matchday 3", "Round of 32", "Round of 16", "Quarterfinals", "Semifinals", "3rd Place Match", "Final"]
-    subtabs = st.tabs(subtab_list)
+    parent_tab_matches, parent_tab_others = st.tabs(["⚽ Matches", "🎉 Others"])
 
-    for index, stage_name in enumerate(subtab_list):
-        with subtabs[index]:
-            stage_matches = [m for m in st.session_state.matches if m['stage'] == stage_name]
-            if not stage_matches:
-                st.info("No schedule mapped for this block.")
-            
-            for m in stage_matches:
-                match_id = m['match_id']
-                team_a, team_b = m['team_a'], m['team_b']
-                odds_a, odds_draw, odds_b = calculate_odds(team_a, team_b)
-                odds_map = {team_a: odds_a, "Draw": odds_draw, team_b: odds_b}
-                
-                st.write(f"### {m['info']} — {team_a} vs. {team_b}")
-                st.write(f"📅 **Date:** {m['date']} | ⏰ **Time:** {m['time']}")
-                
-                try:
-                    kickoff_str = f"{m['date']} 2026 {m['time']}"
-                    kickoff_datetime = datetime.datetime.strptime(kickoff_str, "%d %B %Y %I:%M%p")
-                    is_locked = datetime.datetime.now() >= kickoff_datetime
-                except:
-                    is_locked = False
-                
-                if match_id in global_results:
-                    res_data = global_results[match_id]
-                    final_outcome = res_data.get("outcome")
-                    score_string = res_data.get("score_text", "Settled")
-                    
-                    st.write(f"🔢 **Final Score:** {score_string}")
-                    if match_id in st.session_state.bets:
-                        user_bet = st.session_state.bets[match_id]
-                        if user_bet['choice'] == final_outcome:
-                            st.success(f"✅ Result: **{final_outcome}** | **WIN 🎉** (+${user_bet['amount'] * user_bet['odds']:.2f})")
-                        else:
-                            st.error(f"✅ Result: **{final_outcome}** | **LOSE ❌** (-${user_bet['amount']:.2f})")
-                    else:
-                        st.info(f"✅ Result: **{final_outcome}** | No bet placed")
-                
-                elif is_locked:
-                    st.warning("🔒 Wagers Locked! This match has already kicked off.")
-                    if match_id in st.session_state.bets:
-                        current_bet = st.session_state.bets[match_id]
-                        st.info(f"📋 Locked Slip: Placed ${current_bet['amount']:.2f} on **{current_bet['choice']}**")
-                    else:
-                        st.caption("No bet was registered before kickoff closure.")
-                        
+    # ⚽ TAB 1: MATCHES 
+    with parent_tab_matches:
+        betting_hub.render_matches_tab(
+            user_profile=user_profile,
+            username_input=username_input,
+            global_results=global_results,
+            cycle=cycle,
+            calculate_odds=calculate_odds
+        )
+
+    # 🎉 TAB 2: OTHERS (STAYS IN MAIN FILE SINCE IT IS VERY SHORT)
+    with parent_tab_others:
+        st.subheader("🎉 Special Custom Friends Bets")
+        if not global_fun_bets: st.info("No custom prop bets have been created by the admin yet.")
+        else:
+            for p_id, prop in global_fun_bets.items():
+                st.markdown(f"### ✨ Bet: *\"{prop['description']}\"*")
+                st.write(f"📈 Odds: **{prop['odds']}x**")
+                if prop["status"] != "OPEN":
+                    st.write(f"🏁 **Result:** `{prop['status']}`")
+                    if p_id in user_profile.get("fun_bets", {}):
+                        st.success("✅ WIN!") if user_profile["fun_bets"][p_id]["choice"] == prop["status"] else st.error("❌ LOST!")
                 else:
-                    st.write(f"**Live Odds:** {team_a}: **{odds_a}** | Draw: **{odds_draw}** | {team_b}: **{odds_b}**")
-                    choice = st.radio("Pick outcome:", [team_a, "Draw", team_b], key=f"pick_{match_id}_c{cycle}", horizontal=True)
-                    
-                    if st.session_state.balance < 100.0:
-                        st.error("📉 Insufficient Balance! Minimum required wager is $100.00.")
+                    if p_id in user_profile.get("fun_bets", {}):
+                        st.info(f"🔒 Ticket Logged: Staked **${user_profile['fun_bets'][p_id]['amount']}** on `{user_profile['fun_bets'][p_id]['choice']}`")
                     else:
-                        bet_amount = st.number_input("Wager Amount ($)", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, step=50.0, key=f"amt_{match_id}_c{cycle}")
-                        if match_id in st.session_state.bets:
-                            current_bet = st.session_state.bets[match_id]
-                            st.info(f"🔒 Active Stake locked: ${current_bet['amount']} on **{current_bet['choice']}**")
-                        else:
-                            if st.button("Submit Bet Slip", key=f"btn_{match_id}_c{cycle}"):
-                                st.session_state.bets[match_id] = {"choice": choice, "amount": bet_amount, "odds": odds_map[choice]}
-                                st.session_state.balance -= bet_amount
-                                user_profile["balance"] = st.session_state.balance
-                                user_profile["bets"] = st.session_state.bets
-                                save_user_data(username_input, user_profile)
-                                st.success("Bet securely logged into history registry!")
-                                st.rerun()
+                        prop_choice = st.radio("Will this happen?", ["HIT", "MISSED"], key=f"choice_{p_id}", horizontal=True)
+                        prop_amount = st.number_input("Wager Amount ($)", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, key=f"amt_{p_id}")
+                        if st.button("Submit Fun Bet", key=f"submit_{p_id}"):
+                            user_profile.setdefault("fun_bets", {})[p_id] = {"choice": prop_choice, "amount": prop_amount, "odds": prop["odds"], "paid": False}
+                            st.session_state.balance -= prop_amount; user_profile["balance"] = st.session_state.balance
+                            save_user_data(username_input, user_profile); st.rerun()
                 st.divider()
 
 elif menu_selection == "💰 Balance":
     st.title("💰 Balance & Financial Logs")
     st.divider()
     m_col1, m_col2 = st.columns(2)
-    with m_col1:
-        st.metric(label="Current Available Liquid Balance", value=f"${st.session_state.balance:.2f}")
-    with m_col2:
-        total_payout_earnings = 0.0
-        for mid, bet in st.session_state.bets.items():
-            if mid in global_results:
-                actual_outcome = global_results[mid].get("outcome")
-                if actual_outcome == bet['choice']:
-                    total_payout_earnings += (bet['amount'] * bet['odds'])
-        st.metric(label="Total Generated Winning Revenue", value=f"${total_payout_earnings:.2f}")
+    m_col1.metric("Available Balance", f"${st.session_state.balance:.2f}")
+    
+    # Calculate Total Earnings
+    total_payout_earnings = sum((b['amount'] * b['odds']) for mid, b in st.session_state.bets.items() if (int(mid) in global_results and b['choice'] == global_results[int(mid)]['outcome']))
+    m_col2.metric("Total Generated Revenue", f"${total_payout_earnings:.2f}")
 
-    st.write("")
-    st.subheader("📊 Your Balance History Timeline")
-    
-    balance_history = [1000.0] 
-    chart_labels = ["Account Registration"]
-    current_running_balance = 1000.0
-    
-    COUNTRY_CODES = {
-        "argentina": "ARG", "france": "FRA", "spain": "ESP", "england": "ENG", "portugal": "POR",
-        "brazil": "BRA", "morocco": "MAR", "netherlands": "NED", "germany": "GER", "belgium": "BEL",
-        "croatia": "CRO", "mexico": "MEX", "colombia": "COL", "usa": "USA", "senegal": "SEN",
-        "japan": "JPN", "uruguay": "URU", "switzerlands": "SUI", "korea republic": "KOR", "australia": "AUS",
-        "iran": "IRN", "austria": "AUT", "turkiye": "TUR", "algeria": "ALG", "ecuador": "ECU",
-        "egypt": "EGY", "ivory coast": "CIV", "norway": "NOR", "canada": "CAN", "panama": "PAN",
-        "sweden": "SWE", "scotland": "SCO", "paraguay": "PAR", "czechia": "CZE", "congo dr": "COD",
-        "qatar": "QAT", "uzbekistan": "UZB", "tunisia": "TUN", "iraq": "IRQ", "saudi arabia": "KSA",
-        "south africa": "RSA", "bosnia and herzegovina": "BIH", "cabo verde": "CPV", "jordan": "JOR",
-        "ghana": "GHA", "new zealand": "NZL", "curacao": "CUW", "haiti": "HAI"
-    }
-    
-    sorted_bets = sorted(st.session_state.bets.items(), key=lambda x: x[0])
-    
-    for mid, bet in sorted_bets:
-        if mid in global_results:
-            m = next((match for match in st.session_state.matches if match['match_id'] == mid), None)
-            
-            if m:
-                team_a_clean = m['team_a'].lower().strip()
-                team_b_clean = m['team_b'].lower().strip()
-                team_a_code = COUNTRY_CODES.get(team_a_clean, m['team_a'][:3].upper())
-                team_b_code = COUNTRY_CODES.get(team_b_clean, m['team_b'][:3].upper())
-                match_name = f"{team_a_code} vs. {team_b_code}"
-            else:
-                match_name = f"Match #{mid}"
-            
-            current_running_balance -= bet['amount']
-            actual_outcome = global_results[mid].get("outcome")
-            
-            if actual_outcome == bet['choice']:
-                current_running_balance += (bet['amount'] * bet['odds'])
-                
-            balance_history.append(current_running_balance)
-            chart_labels.append(match_name)
-            
-    if len(balance_history) <= 1:
-        st.info("📉 Chart timeline will populate here automatically once your first match prediction is settled by the admin.")
-    else:
-        chart_data = {
-            "Match Milestone": chart_labels,
-            "Account Balance ($)": balance_history
-        }
-        st.line_chart(data=chart_data, x="Match Milestone", y="Account Balance ($)", use_container_width=True)
-        st.caption("Track your upward or downward account value progression after each settled match milestone.")
+    # History Line Chart Display Logic
+    st.subheader("📊 Balance History Timeline")
+    balance_history, chart_labels = [1000.0], ["Registration"]
+    curr_bal = 1000.0
+    if st.session_state.bets:
+        for mid, bet in sorted(st.session_state.bets.items(), key=lambda x: str(x[0])):
+            if int(mid) in global_results:
+                curr_bal -= bet['amount']
+                if global_results[int(mid)]['outcome'] == bet['choice']: curr_bal += (bet['amount'] * bet['odds'])
+                balance_history.append(curr_bal); chart_labels.append(f"Match #{mid}")
+    if len(balance_history) <= 1: st.info("📉 Timeline will populate once first prediction is settled.")
+    else: st.line_chart(data={"Match Milestone": chart_labels, "Account Balance ($)": balance_history}, x="Match Milestone", y="Account Balance ($)")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    # Favorite Country Setup Tracker Dropdown
+    st.divider()
+    country_options = sorted(list(FIFA_SCORES.keys()))
+    current_fav = user_profile.get("favorite_country", "")
+    selected_fav = st.selectbox("Choose your favorite nation to track:", options=["None"] + country_options, index=0 if current_fav == "" else country_options.index(current_fav) + 1)
+    updated_fav_val = "" if selected_fav == "None" else selected_fav
+    if updated_fav_val != current_fav:
+        user_profile["favorite_country"] = updated_fav_val; save_user_data(username_input, user_profile); st.rerun()
+
+    # Balance Deposit Request Forms Queue
     st.subheader("💳 Request Deposit Authorization")
-    deposit_amount = st.number_input("Specify Deposit Volume ($):", min_value=10.0, max_value=500.0, value=500.0, step=50.0)
-    deposit_reason = st.text_area("State your reason for this request:", value="", placeholder="e.g., Please approve this request to back up my next series of bids.")
-    
-    if st.button("Submit Balance Request to Admin Queue", use_container_width=True):
-        if deposit_reason.strip() == "":
-            st.error("⚠️ You must provide a reason to request funds!")
+    deposit_amount = st.number_input("Specify Volume ($):", min_value=10.0, max_value=500.0, value=500.0)
+    deposit_reason = st.text_area("Reason for request:")
+    if st.button("Submit Balance Request", use_container_width=True):
+        if not deposit_reason.strip(): st.error("⚠️ Reason required!")
         else:
-            current_requests = load_balance_requests()
-            current_requests.append({
-                "user": username_input, 
-                "amount": deposit_amount,
-                "reason": deposit_reason.strip()
-            })
-            save_balance_requests(current_requests)
-            st.success(f"✅ Request for ${deposit_amount:.2f} dispatched successfully.")
+            reqs = load_balance_requests(); reqs.append({"user": username_input, "amount": deposit_amount, "reason": deposit_reason.strip()})
+            save_balance_requests(reqs); st.success("Dispatched to admin queue!")
 
-    st.divider()
-    st.subheader("📊 Performance Ledger History")
-    if not st.session_state.bets:
-        st.info("No wagers logged on this profile yet.")
-    else:
-        for mid, bet in st.session_state.bets.items():
-            m = next((match for match in st.session_state.matches if match['match_id'] == mid), None)
-            if m:
-                status_banner = "🟡 OPEN PROPOSITION"
-                if mid in global_results:
-                    actual_outcome = global_results[mid].get("outcome")
-                    status_banner = "🟢 WON PAYOUT" if bet['choice'] == actual_outcome else "🔴 LOST SLIP"
-                
-                with st.expander(f"{status_banner} — {m['team_a']} vs {m['team_b']}"):
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.write(f"**Predicted Outcome:** {bet['choice']}")
-                        st.write(f"**Initial Locked Amount:** ${bet['amount']:.2f}")
-                    with col_b:
-                        st.write(f"**Odds Multiple:** x{bet['odds']}")
-                        if mid in global_results:
-                            actual_outcome = global_results[mid].get("outcome")
-                            score_string = global_results[mid].get("score_text", "Settled")
-                            
-                            st.write(f"**Official Field Result:** {actual_outcome} ({score_string})")
-                            if bet['choice'] == actual_outcome:
-                                st.markdown(f"**Net Received Return:** <span style='color:green'>+${bet['amount'] * bet['odds']:.2f}</span>", unsafe_allow_html=True)
-                            else:
-                                st.markdown(f"**Net Loss Value:** <span style='color:red'>-${bet['amount']:.2f}</span>", unsafe_allow_html=True)
-                        else:
-                            st.caption("Waiting for tournament resolution data updates...")
-                            
 elif menu_selection == "🏆 Leaderboard":
-    st.title("🏆 Profit Standings Leaderboard")
-    st.divider()
-    
-    leaderboard_records = []
+    st.title("🏆 Standing Leaderboard")
     user_files = glob.glob("user_*.json")
-    
+    leaderboard_records = []
     for file_path in user_files:
-        try:
-            raw_name = os.path.basename(file_path).replace("user_", "").replace(".json", "")
-            data = load_user_data(raw_name)
-                
-            display_name = raw_name.upper()
-            bets = {int(k): v for k, v in data.get("bets", {}).items()}
-            
-            total_winnings = 0.0
-            for mid, bet in bets.items():
-                if mid in global_results:
-                    actual_outcome = global_results[mid].get("outcome")
-                    if actual_outcome == bet['choice']:
-                        total_winnings += (bet['amount'] * bet['odds'])
-                    
-            leaderboard_records.append({
-                "Player": display_name,
-                "Current Balance": f"${data.get('balance', 0.0):.2f}",
-                "Total Winning Revenue": total_winnings
-            })
-        except:
-            pass
-            
-    leaderboard_records = sorted(leaderboard_records, key=lambda x: x["Total Winning Revenue"], reverse=True)
-    for row in leaderboard_records:
-        row["Total Winning Revenue"] = f"${row['Total Winning Revenue']:.2f}"
-    
-    if not leaderboard_records:
-        st.info("No profile records detected to establish leaderboard metrics yet.")
-    else:
-        st.dataframe(
-            leaderboard_records,
-            use_container_width=True,
-            column_config={
-                "Player": "👤 Profile Username",
-                "Current Balance": "💳 Available Wallet",
-                "Total Winning Revenue": "💰 Earned Winning Revenue"
-            }
-        )
-        st.balloons()
-        st.success(f"🥇 Current frontrunner dominating the ranks: **{leaderboard_records[0]['Player']}**!")
+        r_name = os.path.basename(file_path).replace("user_", "").replace(".json", "")
+        u_d = load_user_data(r_name)
+        leaderboard_records.append({"Player": r_name.upper(), "Current Balance": f"${u_d.get('balance', 0.0):.2f}"})
+    st.dataframe(leaderboard_records, use_container_width=True)
 
 elif menu_selection == "⚽ Real Results":
     render_real_results_page()
 
 st.markdown("---")
-st.caption("🤖 PAYGONE Simulator Engine • Calculated using live FIFA Performance Indices.")
+st.caption("🤖 PAYGONE Simulator Engine")
