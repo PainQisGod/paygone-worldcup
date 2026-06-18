@@ -290,15 +290,20 @@ if menu_selection == "🕹️ Hub":
 
     with parent_tab_others:
         st.subheader("🎉 Special Custom Friends Bets")
-        if not global_fun_bets: st.info("No custom prop bets have been created by the admin yet.")
+        if not global_fun_bets: 
+            st.info("No custom prop bets have been created by the admin yet.")
         else:
             for p_id, prop in global_fun_bets.items():
                 st.markdown(f"### ✨ Bet: *\"{prop['description']}\"*")
                 st.write(f"📈 Odds: **{prop['odds']}x**")
+                
                 if prop["status"] != "OPEN":
                     st.write(f"🏁 **Result:** `{prop['status']}`")
                     if p_id in user_profile.get("fun_bets", {}):
-                        st.success("✅ WIN!") if user_profile["fun_bets"][p_id]["choice"] == prop["status"] else st.error("❌ LOST!")
+                        if user_profile["fun_bets"][p_id]["choice"] == prop["status"]:
+                            st.success("✅ WIN!")
+                        else:
+                            st.error("❌ LOST!")
                 else:
                     if p_id in user_profile.get("fun_bets", {}):
                         st.info(f"🔒 Ticket Logged: Staked **{user_profile['fun_bets'][p_id]['amount']:,.2f}{CURRENCY}** on `{user_profile['fun_bets'][p_id]['choice']}`")
@@ -307,10 +312,12 @@ if menu_selection == "🕹️ Hub":
                         prop_amount = st.number_input(f"Wager Amount ({CURRENCY.strip()})", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, key=f"amt_{p_id}")
                         if st.button("Submit Fun Bet", key=f"submit_{p_id}"):
                             user_profile.setdefault("fun_bets", {})[p_id] = {"choice": prop_choice, "amount": prop_amount, "odds": prop["odds"], "paid": False}
-                            st.session_state.balance -= prop_amount; user_profile["balance"] = st.session_state.balance
-                            db_manager.save_user_data(username_input, user_profile); st.rerun()
+                            st.session_state.balance -= prop_amount
+                            user_profile["balance"] = st.session_state.balance
+                            db_manager.save_user_data(username_input, user_profile)
+                            st.rerun()
                 st.divider()
-
+                
 elif menu_selection == "💰 Balance":
     st.title("💰 Balance & Financial Logs")
     st.divider()
