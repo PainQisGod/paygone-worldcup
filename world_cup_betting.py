@@ -119,7 +119,17 @@ if "current_user" not in st.session_state:
                     st.rerun()
                 else: st.error("❌ Incorrect profile password!")
             else:
-                new_profile = {"password": password_input, "balance": 1000.0, "bets": {}, "processed_payouts": [], "parlays": [], "favorite_country": "", "fun_bets": {}}
+                # Initialized profile schema incorporating explicit empty inventory lists
+                new_profile = {
+                    "password": password_input, 
+                    "balance": 1000.0, 
+                    "bets": {}, 
+                    "processed_payouts": [], 
+                    "parlays": [], 
+                    "favorite_country": "", 
+                    "fun_bets": {},
+                    "inventory": []  # 👈 Registered tracking field
+                }
                 db_manager.save_user_data(username_input, new_profile)
                 st.session_state.current_user = username_input
                 st.session_state.balance = new_profile["balance"]
@@ -141,28 +151,26 @@ if "parlay_cart" not in st.session_state: st.session_state.parlay_cart = {}
 payout_happened = False
 for match_id, user_bet in list(st.session_state.bets.items()):
     target_key = int(match_id) if int(match_id) in global_results else (str(match_id) if str(match_id) in global_results else None)
+    
     if target_key is not None and int(match_id) not in st.session_state.processed_payouts:
-        if isinstance(user_bet, dict) and user_bet.get('choice') == global_results[target_key].get("outcome"):
-            st.session_state.balance += (user_bet.get('amount', 0.0) * user_bet.get('odds', 1.0))
+        if isinstance(user_bet, dict):
+            actual_outcome = global_results[target_key].get("outcome")
+            user_choice = user_bet.get('choice')
+            modifier_used = user_bet.get('modifier')
+            
+            # --- CASE 1: USER WON ---
+            if user_choice == actual_outcome:
+                st.session_state.balance += (user_bet.get('amount', 0.0) * user_bet.get('odds', 1.0))
+            
+            # --- CASE 2: USER LOST (CHECK FOR INSURANCE RECOVERY) ---
+            else:
+                if modifier_used == "insurance":
+                    refund_value = user_bet.get('amount', 0.0) * 0.50
+                    st.session_state.balance += refund_value
+                    st.toast(f"🛡️ Insurance Triggered! Refunded {refund_value:,.2f}{CURRENCY} on Match #{match_id}")
+
         st.session_state.processed_payouts.append(int(match_id))
         payout_happened = True
-
-if "parlays" in user_profile:
-    for parlay in user_profile["parlays"]:
-        if parlay.get("status") == "OPEN":
-            all_settled, parlay_won = True, True
-            for m_id, leg in parlay["legs"].items():
-                t_leg_key = int(m_id) if int(m_id) in global_results else (str(m_id) if str(m_id) in global_results else None)
-                if t_leg_key is not None:
-                    if leg["choice"] != global_results[t_leg_key].get("outcome"): parlay_won = False
-                else: all_settled = False
-            if all_settled:
-                parlay["status"] = "SETTLED"
-                if parlay_won:
-                    st.session_state.balance += parlay["potential_payout"]
-                    st.toast(f"🎉 PARLAY WINNER! Received {parlay['potential_payout']:,.2f}{CURRENCY}!")
-                else: st.toast("❌ Parlay Busted!")
-                payout_happened = True
 
 for prop_id, user_wager in list(user_profile.get("fun_bets", {}).items()):
     if prop_id in global_fun_bets and global_fun_bets[prop_id]["status"] != "OPEN" and not user_wager.get("paid", False):
@@ -214,7 +222,7 @@ with st.sidebar:
             
             if st.button("🔴 Reset Loaded Wallet Data", type="primary"):
                 st.session_state.update({"balance": 1000.0, "bets": {}, "processed_payouts": [], "parlay_cart": {}})
-                user_profile.update({"balance": 1000.0, "bets": {}, "processed_payouts": [], "parlays": [], "fun_bets": {}})
+                user_profile.update({"balance": 1000.0, "bets": {}, "processed_payouts": [], "parlays": [], "fun_bets": {}, "inventory": []})
                 db_manager.save_user_data(username_input, user_profile); st.session_state.reset_cycle += 1; st.rerun()
             if st.button("🚨 Wipe All Match Results GLOBALLY"):
                 save_global_results({}); save_fun_bets({}); st.rerun()
@@ -277,7 +285,8 @@ if menu_selection == "🕹️ Hub":
     st.metric(label="Your Current Balance", value=f"{st.session_state.balance:,.2f}{CURRENCY}")
     st.divider()
 
-    parent_tab_matches, parent_tab_others = st.tabs(["⚽ Matches", "🎉 Others"])
+    # Create layout tabs dynamically (Matches, Fun Props, and Power-Up Store Inventory Modules)
+    parent_tab_matches, parent_tab_others, parent_tab_shop = st.tabs(["⚽ Matches", "🎉 Others", "🏪 N-Dollar Shop"])
 
     with parent_tab_matches:
         betting_hub.render_matches_tab(
@@ -300,6 +309,7 @@ if menu_selection == "🕹️ Hub":
                 if prop["status"] != "OPEN":
                     st.write(f"🏁 **Result:** `{prop['status']}`")
                     if p_id in user_profile.get("fun_bets", {}):
+                        # 👇 FIX: Changed from one-liner syntax to explicit if/else block to prevent rendering crashes
                         if user_profile["fun_bets"][p_id]["choice"] == prop["status"]:
                             st.success("✅ WIN!")
                         else:
@@ -317,7 +327,63 @@ if menu_selection == "🕹️ Hub":
                             db_manager.save_user_data(username_input, user_profile)
                             st.rerun()
                 st.divider()
+
+    with parent_tab_shop:
+        st.subheader("🏪 The N-Dollar Power-Up Shop")
+        st.write("Spend your winnings to buy utility items. Acquired assets can be assigned directly onto future match prediction slips.")
+        st.divider()
+        
+        # Expanded Item Catalog
+        SHOP_ITEMS = {
+            "double_down": {
+                "name": "🔥 Double-Down Voucher",
+                "cost": 2000.0,
+                "desc": "Injects an immediate +0.50x modifier to your single slip multiplier output values."
+            },
+            "underdog_boost": {
+                "name": "💎 Underdog Blessing",
+                "cost": 1000.0,
+                "desc": "Injects a heavy bonus of +1.00x onto individual matching selections where baseline game odds exceed 3.0x."
+            },
+            "insurance": {
+                "name": "🛡️ Half-Loss Insurance",
+                "cost": 1500.0,
+                "desc": "Safeguards your wager! If your prediction is incorrect, 50% of your staked N-Dollars are instantly refunded back to your wallet."
+            },
+            "jackpot_fever": {
+                "name": "🎰 Jackpot Fever Voucher",
+                "cost": 2500.0,
+                "desc": "High risk, high reward! Grants a massive +2.00x modifier, but ONLY activates if you successfully predict a Draw."
+            }
+        }
+        
+        if "inventory" not in user_profile:
+            user_profile["inventory"] = []
+
+        # Render items in a 2x2 responsive grid
+        cols = st.columns(2)
+        for idx, (item_id, item) in enumerate(SHOP_ITEMS.items()):
+            # Alternate items between column 0 and column 1
+            with cols[idx % 2]:
+                st.markdown(f"### {item['name']}")
+                st.write(f"💰 Item Price: **{item['cost']:,.2f}{CURRENCY.strip()}**")
+                st.caption(item['desc'])
                 
+                owned_count = user_profile["inventory"].count(item_id)
+                st.info(f"🎒 Available in Inventory: **{owned_count}**")
+                
+                if st.session_state.balance < item['cost']:
+                    st.button("❌ Insufficient Funds", key=f"buy_fail_{item_id}", disabled=True, use_container_width=True)
+                else:
+                    if st.button(f"🛒 Buy {item['name'].split()[-1]}", key=f"buy_{item_id}", use_container_width=True, type="primary"):
+                        st.session_state.balance -= item['cost']
+                        user_profile["balance"] = st.session_state.balance
+                        user_profile["inventory"].append(item_id)
+                        db_manager.save_user_data(username_input, user_profile)
+                        st.success(f"Acquired: {item['name']}!")
+                        st.rerun()
+                st.write("")
+
 elif menu_selection == "💰 Balance":
     st.title("💰 Balance & Financial Logs")
     st.divider()
