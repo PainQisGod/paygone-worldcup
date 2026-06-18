@@ -1,4 +1,3 @@
-# betting_hub.py
 import streamlit as st
 import datetime
 from db_manager import save_user_data 
@@ -157,13 +156,11 @@ def render_matches_tab(user_profile, username_input, global_results, cycle, calc
                 st.write(f"### {m['info']} — {team_a} vs. {team_b}")
                 st.write(f"📅 **Date:** {m['date']} | ⏰ **Time:** {m['time']}")
                 
-                try:
-                    kickoff_str = f"{m['date']} 2026 {m['time']}"
-                    is_locked = datetime.datetime.now() >= datetime.datetime.strptime(kickoff_str, "%d %B %Y %I:%M%p")
-                except:
-                    is_locked = False
+                # 👇 CHANGE THIS LINE: Read lock status globally from global_results database
+                is_locked = str(match_id) in global_results and global_results[str(match_id)].get("status") == "Locked"
                 
-                if int(match_id) in global_results:
+                # 👇 ADJUST THIS ENTIRE IF/ELIF CONDITION BLOCK SO "LOCKED" MATCHES DON'T LOG AS "FINISHED"
+                if int(match_id) in global_results and global_results[int(match_id)].get("status") == "Finished":
                     res_data = global_results[int(match_id)]
                     final_outcome = res_data.get("outcome")
                     st.write(f"🔢 **Final Score:** {res_data.get('score_text', 'Settled')}")
@@ -171,11 +168,14 @@ def render_matches_tab(user_profile, username_input, global_results, cycle, calc
                         if st.session_state.bets[match_id].get('choice') == final_outcome:
                             st.success(f"✅ Result: **{final_outcome}** | **WIN 🎉**")
                         else:
+                            st.success(f"🛡️ Applied Mod: {st.session_state.bets[match_id].get('modifier', 'NONE').upper()}") if st.session_state.bets[match_id].get('modifier') == 'insurance' else None
                             st.error(f"✅ Result: **{final_outcome}** | **LOSE ❌**")
                 elif is_locked:
-                    st.warning("🔒 Wagers Locked! This match has already kicked off.")
+                    st.warning("🔒 Wagers Locked! Admin has closed betting for this match.")
                     if match_id in st.session_state.bets:
-                        st.info(f"📋 Locked Slip: Placed {st.session_state.bets[match_id]['amount']:,.2f}{CURRENCY} on **{st.session_state.bets[match_id]['choice']}**")
+                        st.info(f"📋 Your Existing Slip: Placed {st.session_state.bets[match_id]['amount']:,.2f}{CURRENCY} on **{st.session_state.bets[match_id]['choice']}**")
+                    else:
+                        st.caption("❌ *Betting window closed. No further wagers accepted.*")
                 else:
                     st.write(f"**Live Odds:** {team_a}: **{odds_a}** | Draw: **{odds_draw}** | {team_b}: **{odds_b}**")
                     
@@ -185,19 +185,68 @@ def render_matches_tab(user_profile, username_input, global_results, cycle, calc
                     else:
                         choice = st.radio("Pick outcome:", [team_a, "Draw", team_b], key=f"pick_{match_id}_c{cycle}", horizontal=True)
                         if betting_mode == "🎫 Single Match Bets":
-                            if st.session_state.balance >= 100.0:
-                                bet_amount = st.number_input(f"Wager Amount ({CURRENCY.strip()})", min_value=100.0, max_value=float(st.session_state.balance), value=100.0, step=50.0, key=f"amt_{match_id}_c{cycle}")
-                                if match_id in st.session_state.bets:
-                                    st.info(f"🔒 Active Stake locked: {st.session_state.bets[match_id]['amount']:,.2f}{CURRENCY} on **{st.session_state.bets[match_id]['choice']}**")
-                                else:
-                                    if st.button("Submit Bet Slip", key=f"btn_{match_id}_c{cycle}"):
-                                        st.session_state.bets[match_id] = {"choice": choice, "amount": bet_amount, "odds": odds_map[choice]}
-                                        st.session_state.balance -= bet_amount
-                                        user_profile["balance"] = st.session_state.balance
-                                        user_profile["bets"] = st.session_state.bets
-                                        save_user_data(username_input, user_profile)
-                                        st.success("Bet securely logged!")
-                                        st.rerun()
+                            # 1. Wager Amount Input Box
+                            bet_amount = st.number_input(f"Wager Amount ({CURRENCY.strip()})", min_value=100.0, max_value=float(st.session_state.balance) if st.session_state.balance >= 100.0 else 100.0, value=100.0, step=50.0, key=f"amt_{match_id}_c{cycle}")
+                            
+                            # 2. FORCE FETCH INVENTORY
+                            user_inv = user_profile.get("inventory", [])
+                            available_modifiers = ["None Selected"]
+                            
+                            if "double_down" in user_inv:
+                                available_modifiers.append("🔥 Use Double-Down Voucher (+0.50x Payout)")
+                            if "underdog_boost" in user_inv:
+                                available_modifiers.append("💎 Use Underdog Blessing (+1.00x Payout)")
+                            if "insurance" in user_inv:
+                                available_modifiers.append("🛡️ Apply Half-Loss Insurance (50% Refund on Loss)")
+                            if "jackpot_fever" in user_inv:
+                                available_modifiers.append("🎰 Activate Jackpot Fever (+2.00x if Draw Wins)")
+                            
+                            # 3. FORCE RENDER THE SELECTBOX IMMEDIATELY
+                            if len(available_modifiers) > 1:
+                                selected_mod = st.selectbox("⚡ Attach Inventory Power-Up:", available_modifiers, key=f"mod_{match_id}_c{cycle}")
+                            else:
+                                st.caption("🎒 *Your inventory is empty or items aren't registering. Buy a voucher in the Shop tab first!*")
+                                selected_mod = "None Selected"
+
+                            # 4. Check if bet already exists, otherwise show submit button
+                            if match_id in st.session_state.bets:
+                                active_bet = st.session_state.bets[match_id]
+                                mod_tag = f" [Active Mod: {str(active_bet.get('modifier', 'None')).upper()}]" if active_bet.get('modifier') else ""
+                                st.info(f"🔒 Active Stake locked: {active_bet['amount']:,.2f}{CURRENCY} on **{active_bet['choice']}**{mod_tag}")
+                            else:
+                                if st.button("Submit Bet Slip", key=f"btn_{match_id}_c{cycle}"):
+                                    chosen_item_id = None
+                                    applied_odds = odds_map[choice]
+                                    
+                                    if "Double-Down" in selected_mod:
+                                        chosen_item_id = "double_down"
+                                        applied_odds += 0.50
+                                    elif "Underdog" in selected_mod:
+                                        chosen_item_id = "underdog_boost"
+                                        applied_odds += 1.00
+                                    elif "Insurance" in selected_mod:
+                                        chosen_item_id = "insurance"
+                                    elif "Jackpot" in selected_mod:
+                                        chosen_item_id = "jackpot_fever"
+                                        if choice == "Draw":
+                                            applied_odds += 2.00
+                                    
+                                    st.session_state.bets[match_id] = {
+                                        "choice": choice, 
+                                        "amount": bet_amount, 
+                                        "odds": round(applied_odds, 2),
+                                        "modifier": chosen_item_id
+                                    }
+                                    st.session_state.balance -= bet_amount
+                                    user_profile["balance"] = st.session_state.balance
+                                    user_profile["bets"] = st.session_state.bets
+                                    
+                                    if chosen_item_id:
+                                        user_profile["inventory"].remove(chosen_item_id)
+                                        
+                                    save_user_data(username_input, user_profile)
+                                    st.success("Bet securely logged with item properties!")
+                                    st.rerun()
                         else:
                             if str_mid in st.session_state.parlay_cart:
                                 st.success(f"➕ Staged: **{st.session_state.parlay_cart[str_mid]['choice']}**")
