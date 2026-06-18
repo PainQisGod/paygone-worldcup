@@ -81,6 +81,45 @@ def render_admin(ADMIN_PASSWORD, INITIAL_MATCHES):
             db_manager.save_global_results(global_results)
             st.rerun()
 
+    # 🔒 4.1. FIXED: Manual Match Lock Control Panel
+    st.divider()
+    st.markdown("#### 🎛️ Manual Match Lock Dashboard")
+    st.caption("Manually close or reopen betting windows for individual fixtures.")
+
+    # Filter by stage to avoid a massive wall of text
+    match_stages = list(set([m['stage'] for m in INITIAL_MATCHES]))
+    lock_stage_filter = st.selectbox("Filter Lock Panel by Stage:", match_stages, key="lock_stage_filter")
+    filtered_lock_matches = [m for m in INITIAL_MATCHES if m['stage'] == lock_stage_filter]
+
+    for m in filtered_lock_matches:
+        m_id = m['match_id']
+        uid_str = str(m_id)
+        
+        # Look up the match's lock status directly inside global_results database
+        is_currently_locked = global_results.get(uid_str, {}).get("status") == "Locked"
+            
+        with st.container():
+            col_info, col_toggle = st.columns([2, 1])
+            with col_info:
+                st.write(f"**Match #{m_id}:** {m['team_a']} vs {m['team_b']}")
+                status_emoji = "🔴 LOCKED" if is_currently_locked else "🟢 OPEN"
+                st.write(f"Status: **{status_emoji}**")
+            with col_toggle:
+                lock_state = st.toggle("Close Bets", value=is_currently_locked, key=f"global_lock_{m_id}")
+                
+                if lock_state != is_currently_locked:
+                    if lock_state:
+                        # Write a "Locked" status signature into your global results file
+                        global_results[uid_str] = {"status": "Locked", "outcome": None, "score_text": "Betting Closed"}
+                    else:
+                        # Reopen it by removing the lock signature block
+                        if uid_str in global_results and global_results[uid_str].get("status") == "Locked":
+                            del global_results[uid_str]
+                            
+                    db_manager.save_global_results(global_results)
+                    st.success(f"Updated Match #{m_id} lock status globally!")
+                    st.rerun()
+
     # 5. Custom Novelty Side Bets
     st.divider()
     st.markdown("#### 🎉 Manage Custom Fun Prop Bets")
